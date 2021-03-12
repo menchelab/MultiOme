@@ -1,0 +1,346 @@
+---
+title: "Analysis of rare x diseases"
+description: |
+ A case study of microscopic analysis using our multiple networks framework
+author:
+  - name: Pisanu Ize Buphamalai
+    affiliation: CeMM
+    affiliation_url: www.cemm.at 
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+This is an example to show the microscopic level of the discovery.
+```{r}
+source("../functions/readdata_functions.R")
+source("../functions/process_LCC_result.R")
+
+library(igraph)
+
+g = process_graph_data("../data/network_edgelists/")
+
+rare_genetic_result_folder = "../cache/output/Orphageneset_rare/"
+
+# load  network labels
+network_info = read_tsv("../data/network_details.tsv")
+
+
+## process the results LCC significance
+result_df = readRDS(paste0(rare_genetic_result_folder, "LCC_and_distance_calculation_results.RDS"))
+  
+processed_result_df = process_LCC_result(result_df)
+
+rare_genetic_diseases_genes <- process_disease_genes_data("../data/table_disease_gene_assoc_orphanet_genetic.tsv", 20,2000)
+
+individual_diseases_genes <- read_tsv("../data/orphaNet_disease_gene_association_with_roots.tsv")
+```
+
+# Rare genetic gastro- diseases
+
+```{r}
+# limit the diseases t consider to max 500 diseases
+
+diseases <- rare_genetic_diseases_genes$disgene_df %>% dplyr::filter(N<500) %>% pull(name)
+
+
+dir.create(file.path("../Figs/","disease_modularity"), showWarnings = F)
+dir.create(file.path("../Figs/","disease_treemap" ), showWarnings = FALSE)
+
+library(ggraph)
+library(tidygraph)
+
+
+# --- define functions - fjaccard and overlap similarity
+graph_similarity = function(g, name1, name2){
+  # compute the Jaccard and overlap Index given a list of graph objects
+  # name1, name2: strings or numeric indicated to the list 
+  
+  g_intersect = graph.intersection(g[[name1]], g[[name2]], keep.all.vertices = FALSE)
+  g_union = graph.union(g[[name1]], g[[name2]], byname = T)
+  
+  #Jaccard index
+  jAB = ecount(g_intersect)/ecount(g_union)
+  
+  # Overlap index
+  oAB = ecount(g_intersect)/min(ecount(g[[name1]]), ecount(g[[name2]]))
+  return(c(jaccardIndex = jAB, overlapindex = oAB))
+}
+
+compute_graph_pairwise_similarity <- function(g){
+  # input: g -- a list of graph objects
+  # output: a dataframe with all pairwise similarity
+  
+  # pairwise combination of all networks names
+  network_sim_df = combn(names(g),m = 2, simplify = T) %>% t() %>% as_tibble
+
+# compute pairwise similarity - this process might take really long
+  simIndex = apply(network_sim_df, 1, function(x) graph_similarity(g, x[1], x[2])) 
+  simIndex_df <- as_tibble(t(simIndex))
+
+  # merge the results
+  network_sim_df <- bind_cols(network_sim_df, simIndex_df)
+  
+  return(network_sim_df)
+}
+
+
+## compute the similarity across networks for all diseases ----------
+
+disease_network_simiilarity <- list()
+
+for(disease_of_interest in diseases){
+  
+
+print(disease_of_interest) 
+
+# unique disease set under the term
+individual_gene_set <- individual_diseases_genes %>% dplyr::filter(grepl(disease_of_interest, roots))
+
+# all genes associated
+genes_set <- rare_genetic_diseases_genes$disgene_list[[disease_of_interest]]
+
+# print the paged table
+
+
+# load package for producing treemap
+pacman::p_load(treemap)
+
+# set a threshold for minimal amount of genes required to include in the plotting
+threshold = 3
+
+individual_gene_set_wrap <- individual_gene_set %>% dplyr::filter(n_genes >= threshold) %>% select(label, n_genes)
+
+n_removed <- sum(individual_gene_set$n_genes<=threshold)
+#individual_gene_set_wrap <- rbind(individual_gene_set_wrap, data.frame(label = sprintf("Other (%i diseases with one or two associated genes)", n_removed), n_genes = n_removed))
+
+
+# Create data
+{group <- ifelse(individual_gene_set_wrap$n_genes > threshold+2, 
+                individual_gene_set_wrap$label, str_trunc(individual_gene_set_wrap$label, 50, side = "right"))
+
+value <- individual_gene_set_wrap$n_genes
+data <- data.frame(group,value)
+ 
+
+{
+  # treemap - uncomment to plot
+  pdf(sprintf("../Figs/disease_treemap/treemap_%s.pdf",disease_of_interest), width = 5, height = 4)
+  
+  treemap(data,
+        palette = "Set3",   
+        title = disease_of_interest,
+            index="group",
+            vSize="value",
+            type="index"
+            )
+
+
+
+dev.off()
+}
+}
+
+
+# significant networks
+signif_nets <- processed_result_df %>% dplyr::filter(name == disease_of_interest, LCC.signif != "none") %>% arrange(desc(LCC.zscore)) %>% pull(network)
+
+# degrees each gene in each network
+degree_diseasegenes <- sapply(g[signif_nets], function(x) degree(x, v = intersect(V(x)$name, genes_set)))
+
+# compute only the subgraphs of the disease genes
+
+disease_graph <- lapply(signif_nets, function(x) g[[x]]- setdiff(V(g[[x]])$name, genes_set))
+names(disease_graph) <- signif_nets
+
+
+# compute jaccard and overlap similarity ---------
+disease_network_simiilarity[[disease_of_interest]] <- compute_graph_pairwise_similarity(disease_graph)
+
+
+# ---- disease graphs as a data frame for converting into tidygraph and ggraph objects ------
+
+disease_graph_df <- lapply(disease_graph, as_data_frame) %>% bind_rows(., .id = "network") %>% mutate(network = factor(network, levels = signif_nets))
+
+
+disease_tidygraph <- as_tbl_graph(disease_graph_df) %>% 
+    mutate(degree = centrality_degree(mode = 'all'))
+
+tidygraph_ggrpah <- ggraph(disease_tidygraph, layout = 'kk')
+
+p <- tidygraph_ggrpah + 
+  geom_edge_density(aes(fill = network),
+                    show.legend = FALSE) + 
+  geom_edge_fan(aes(alpha = stat(index), 
+                    col = network), 
+                  show.legend = FALSE) + 
+  geom_node_point(col = "white",
+                  alpha = 0.25,
+                   show.legend  = F, 
+                   size = 1) + 
+  facet_edges(~factor(network, levels = signif_nets)) + 
+  # black theme
+    theme_graph(fg_text_colour = 'white', 
+              background = "black",
+              text_colour = "white") 
+ 
+# uncomment when need to replot and save
+#ggsave2(sprintf("../Figs/networks_%s.pdf", disease_of_interest), plot = p, width = 10*1.5, height = 6*1.5)
+
+ggsave2(sprintf("../Figs/disease_modularity/networks_%s_separate_dimmed.png", disease_of_interest), plot = p, width = 10*2, height = 6*2.5, dpi=72) 
+
+}
+
+```
+
+```{r}
+disease_network_simiilarity_df <- bind_rows(disease_network_simiilarity, .id = "disease")
+
+ggplot(disease_network_simiilarity_df, aes(x = disease, y = overlapindex)) + geom_boxplot() + geom_jitter() + theme(axis.text.x = element_text(angle = 90, hjust = 1))  + coord_flip()
+
+```
+
+```{r}
+ggplot(disease_network_simiilarity_df %>% mutate(diseases = "all"), aes(x = diseases, y = overlapindex)) + geom_density() + geom_jitter() + theme(axis.text.x = element_text(angle = 90, hjust = 1))  + coord_flip()
+```
+```{r}
+summary(disease_network_simiilarity_df$overlapindex)
+```
+
+
+```{r network plot - white background}
+
+p <- tidygraph_ggrpah + 
+  geom_edge_density(aes(fill = network),
+                    show.legend = FALSE) + 
+  geom_edge_fan(aes(alpha = stat(index), 
+                    col = network), 
+                  show.legend = FALSE) + 
+  geom_node_point(col = "grey50",
+                  alpha = 0.25,
+                   show.legend  = F, 
+                   size = 0.75) + 
+  facet_edges(~factor(network, levels = signif_nets)) + 
+  theme_graph(fg_text_colour = 'black', 
+              background = "white",
+              text_colour = "black") 
+
+p
+
+ggsave2(sprintf("../Figs/networks_%s_separate_white_bg.png", disease_of_interest), plot = p, width = 10, height = 6) 
+```
+
+
+# Prioritise networks with smallest LCC
+
+```{r}
+disease_graph_df_collapse <- disease_graph_df %>% 
+  group_by(from, to) %>% summarise(networks = list(network)) %>% 
+  rowwise() %>% 
+  mutate(n_network = length(networks), 
+         displaytype = signif_nets[min(which(signif_nets %in% networks))])
+
+# graph to be displayed
+graph_disp <- disease_graph_df_collapse %>% as_tbl_graph() %>% 
+    mutate(degree = centrality_degree(mode = 'all'))
+
+
+graph_disp_ggraph <- ggraph(graph_disp, layout = 'kk')
+
+## coloring edges
+p <- graph_disp_ggraph +
+    geom_edge_fan(aes(alpha = stat(index), col = displaytype),
+                  show.legend = F) +
+    geom_node_point(aes(size = degree), col = "white", 
+                    show.legend  = F) + 
+    theme_graph(foreground = 'black', fg_text_colour = 'white', background = "black",
+                text_colour = "white") +
+   scale_edge_color_brewer(type = "div", palette = "Spectral") 
+
+# uncomment when need to replot and save
+#ggsave2(sprintf("../Figs/network_combined_%s.pdf", disease_of_interest), p, width = 9, height = 6)
+
+p
+```
+
+
+
+```{r}
+p <- graph_disp_ggraph +
+    geom_edge_fan(aes(alpha = stat(index), col = displaytype)) +
+    geom_node_point(aes(size = degree), col = "white", 
+                    show.legend  = F) + 
+  geom_edge_density(aes(fill = displaytype)) + 
+    theme_graph(foreground = 'black', fg_text_colour = 'white', background = "black",
+                text_colour = "white") +
+   # scale_color_brewer(type = "seq", palette = "Blues", direction = -1) +
+   scale_edge_color_brewer(type = "div", palette = "Spectral") 
+
+p
+```
+
+
+# highlight by the disease
+```{r}
+# assign a disease label to each gene
+# a dictionary linking gene to representative disease names
+individual_gene_list <- individual_gene_set %>%
+arrange(desc(n_genes)) %>%
+mutate(genes = str_split(genes, ";"),
+new_label = ifelse(n_genes > 4, label, "Other")) %>%
+select(genes, new_label) %>%
+unnest(genes) %>%
+distinct(genes, .keep_all = T) %>%
+deframe()
+
+p <- graph_disp_ggraph +
+    geom_edge_fan(aes(alpha = stat(index),col = "white"), show.legend = F) +
+    geom_node_point(aes(size = degree,
+                        col = individual_gene_list[name]),# col = "white", 
+                    show.legend  = T) + 
+    theme_graph(foreground = 'black', fg_text_colour = 'white', background = "black",
+                text_colour = "white") +
+    scale_color_brewer(type = "seq", palette = "PuBu", direction = -1) +
+  scale_edge_color_manual(values = "#ffffb2")
+
+
+# uncomment this when need to resave the plot
+#ggsave2(sprintf("../Figs/network_combined_%s_node_labels.pdf", disease_of_interest), p, width = 12, height = 6)
+
+p
+```
+
+
+## add node labels and apply community detection
+
+```{r}
+
+graph_community <- disease_graph_df_collapse %>% 
+  dplyr::filter("coex_EMC" %in% networks) %>%
+  as_tbl_graph(directed = F) %>% 
+  activate(nodes) %>%
+    mutate(degree = centrality_degree(mode = 'all'),
+      community = as.factor(group_louvain()))
+
+graph_community_gg <- ggraph(graph_community,layout = 'kk')
+
+p <- graph_community_gg +
+    geom_edge_fan(aes(col = "white")) +
+    geom_node_point(aes(size = degree, col = community),
+                    show.legend  = T) + 
+    theme_graph(foreground = 'black', fg_text_colour = 'white', background = "black",
+                text_colour = "white") +
+   # scale_color_brewer(type = "seq", palette = "Blues", direction = -1) +
+  scale_edge_color_manual(values = "white") 
+
+p
+```
+
+
+```{r}
+graph_community_gg$data %>% arrange(community) %>% select(name, community) %>% dplyr::filter(community %in% c(1:5)) %>% pull(name) %>% paste(., collapse = ", ")
+```
+
+```{r}
+graph_community_gg$data %>% arrange(community) %>% select(name, community) %>% dplyr::filter(community %in% c(1:5)) %>% View()
+```
+

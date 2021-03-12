@@ -1,0 +1,297 @@
+---
+title: "LCC analysis on new coex networks"
+output: html_notebook
+---
+
+```{r}
+# library and configurations
+
+library(tidyverse)
+library(ggrepel)
+
+# for printing (cm)
+A4width = 21
+A4height = 29.7
+```
+
+
+```{r}
+## Combine the results data for the analysis
+
+#result_folders = c(DOgeneset_NewCoex_cor75")
+
+setwd("~/Documents/projects/Multiome")
+
+result_folder = "~/Documents/projects/Multiome/analysis/disNet_specificity/results/output/Orphageneset_groupedCoex_38_dispfilter_001_cor075_cut5/"
+
+result_df = readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.RDS"))
+
+result_df = result_df %>% select(-LCC.igraph)
+
+result_df$LCC.pval = pnorm(result_df$LCC.zscore, lower.tail = F)
+
+#result_df$network = factor(result_df$network, levels = gtex_groups$abbr, labels = gtex_groups$tissue)
+result_df$network = factor(result_df$network)
+
+# categorising significant level
+result_df$LCC.signif = cut(-result_df$LCC.pval, 
+                           breaks=-c(1, 5e-2, 1e-2, 1e-3, 1e-4, 0),
+                           labels=c("none", "*","**","***", "****"), ordered_result = T)
+
+
+result_df$minusLogpval = -log10(result_df$LCC.pval)
+
+## reorder x and y axis based on similarity
+#library(reshape2)
+#dat = dcast(data = result_df, formula = name ~ network, value.var = "minusLogpval")
+#dist.disease =  dist(dat[,-1], method = "euclidean")
+#cluster.disease = hclust(dist.disease)
+#dist.network = dist(t(dat[,-1]), method = "euclidean")
+#cluster.network = hclust(dist.network)
+
+#result_df$name = factor(result_df$name, levels = dat$name[cluster.disease$order])
+#result_df$network = factor(result_df$network, levels = colnames(dat[,-1])[cluster.network$order])
+
+
+result_df = result_df %>% group_by(name) %>% mutate(correctedPval = p.adjust(LCC.pval, method = "BH"))
+result_df$LCC.signif = cut(-result_df$correctedPval, 
+                           breaks=-c(1, 5e-2, 1e-2, 1e-3, 1e-4, 0),
+                           labels=c("none", "*","**","***", "****"), ordered_result = T)
+
+# network data load
+network_info = read_tsv("./networks/gtex_coexpresssion/cache/all_tissues_with_group_new_and_samplesizes.txt")
+
+network_names = network_info %>% distinct(abbr, .keep_all = T) 
+network_abbr = network_names$tissue; names(network_abbr) = network_names$abbr
+
+
+levels_networks = result_df %>% ungroup %>% dplyr::filter(LCC.signif!="none") %>% count(network, sort = T)  %>% pull(network) %>% as.character()
+levels_name = result_df %>% ungroup %>% dplyr::filter(LCC.signif!="none") %>% count(name, sort = T)  %>% pull(name) %>% as.character()
+
+
+# reformat the result data frame with proper names
+
+result_df = result_df %>% ungroup %>% 
+  dplyr::filter(name %in% levels_name, network %in% levels_networks) %>%
+  mutate(name = factor(name, levels = levels_name),
+                                 network =  factor(network, levels = levels_networks, labels = network_abbr[levels_networks]))
+
+## modify palettes
+cols = brewer.pal(5, "Blues")
+cols = cols[2:5]
+
+pacman::p_load_gh("nightingalehealth/ggforestplot")
+p <- result_df  %>% dplyr::filter(LCC.signif != "none") %>%
+  ggplot(aes(name, network, tissue_broad)) + geom_tile(fill = "white") + #facet_grid(tissue_broad ~., scales = "free", space = "free")  +## to get the rect filled
+  # geom_point(aes(size = N_in_graph*1.7),  colour = LCC.signif)  +   ## geom_point for circle illusion
+   geom_stripes(odd = "grey90", even = "#00000000") +
+#  theme_light() + 
+ # theme_forest() +
+  theme_minimal_hgrid() +
+  theme(panel.spacing = unit(0.25, "lines"),
+        axis.text.x = element_text(angle = 90, hjust = 1), 
+        panel.grid.major.y = element_line(colour="grey", linetype="dotted")) +
+    geom_point(aes(
+    size = log10(N_in_graph),
+    fill = LCC.signif,
+    colour = LCC.signif), alpha = 0.7)  + 
+  scale_color_manual(values = cols) +
+  # scale_size(range = c(1, 10))+             ## to tune the size of circles
+    coord_flip() +
+  labs(x="", y="") 
+
+#ggsave(p, filename = paste0("../../fig/coex_Orphanet_heatmap",folder, ".pdf"), width = 10, height = 10)
+
+
+ggsave("./Figs/heatmap_network_disease_association_orphanets_v2.pdf", width = 1.2*0.5*A4width, height = 1.2*0.175*A4height)
+```
+
+
+# bar plot for the number of diseases/tissues
+```{r}
+# number of significant diseases
+library(scales)
+ntissue_per_disease = result_df %>% dplyr::filter(LCC.signif!="none") %>% count(name, LCC.signif) %>% mutate(name = factor(name, levels = levels_name))
+
+ggplot(ntissue_per_disease, aes(x = name, y = n, fill = LCC.signif)) + geom_bar(stat = "identity") +  scale_fill_manual(values = cols) + theme_minimal_vgrid() + theme(axis.text.y = element_blank()) + ylab("number of tissues") + coord_flip() + scale_y_continuous(breaks= pretty_breaks())
+
+ggsave("./Figs/barplot_ntissue_per_disease_for_heatmap_network_disease_association_orphanets.pdf", width = 0.25*1.1*0.5*A4width, height = 1.1*0.175*A4height)
+```
+
+
+```{r}
+# number of significant diseases
+ndisease_per_tissue = result_df %>% dplyr::filter(LCC.signif!="none") %>% count(network, LCC.signif) 
+
+ggplot(ndisease_per_tissue, aes(x = network, y = n, fill = LCC.signif)) + geom_bar(stat = "identity")  +  scale_fill_manual(values = cols)+ theme_minimal_hgrid() + ylab("number of disease groups") + scale_y_continuous(breaks= pretty_breaks()) + theme(axis.text.x = element_blank())  
+
+ggsave("./Figs/barplot_ndisease_per_tissue_for_heatmap_network_disease_association_orphanets.pdf", width = 1.1*0.5*A4width, height = 0.35*1.1*0.175*A4height)
+```
+
+
+# The analysis of the number of tissues to the significance
+
+- does the total number of genes in the set influent the total networks?
+- age of onset? -> how to deal with the irregularity of the datra: not direct gene to disease to n network, but rather average values?
+
+```{r}
+# is the number of significant tissues influenced by the number of genes in the disease set?
+setwd("~/Documents/projects/Multiome/")
+source("./functions/readdata_functions.R")
+Orphanet_dat = process_disease_genes_data("./Disease_gene_assoc/Orphanet/output/table_disease_gene_assoc_orphanet.tsv", min_gene = 20, max_gene = 2000)
+
+Orphanet_df = Orphanet_dat$disgene_df
+```
+
+
+```{r}
+N_signif_net = result_df %>% group_by(name) %>% dplyr::filter(LCC.signif) %>% count() %>% rename(significant_tissues = n)
+
+Orphanet_df = left_join(Orphanet_df, N_signif_net)
+
+library(ggrepel)
+p =  ggplot(Orphanet_df, aes(x = N, y = significant_tissues, label = ifelse(N > 700, name, ""))) + geom_point() + scale_x_log10()+ ggtitle("There is no strong relationship", subtitle = "between gene set size and number of significant tissues") + theme_cowplot() + xlab("Number of associated genes") + ylab("Number of significant tissues") + geom_text_repel()
+
+  ggsave("./Figs/scatter_SignificantTissues_Ngenes.pdf", p, width = 0.25*A4width, height = 0.125*A4height)
+```
+
+
+```{r}
+p = ggplot(result_df, aes(x = N_in_graph, y = LCC.zscore)) + geom_point() + ggtitle("There is no strong relationship", subtitle = "between gene set size and number of significant tissues") + theme_cowplot() + xlab("Number of genes in the network") + ylab("LCC z-score") + theme(legend.position = "bottom")  + facet_wrap(.~name, ncol =3, scales = "free")
+
+ ggsave("./Figs/scatter_SignificantTissues_Ngenes_per_disease.pdf", p, width = 0.5*A4width, height = 0.5*A4height)
+```
+
+
+## To fix: the non-coexpression networks
+```{r}
+q <- result_df %>% filter(group != "coex", network != "reactome_copathway_shared_over_5") %>%
+  ggplot(aes(name, network, tissue)) + geom_tile(fill = "white") + #facet_grid(tissue ~., scales = "free", space = "free")  +## to get the rect filled
+  # geom_point(aes(size = N_in_graph*1.7),  colour = LCC.signif)  +   ## geom_point for circle illusion
+  geom_point(aes(#colour = significant, 
+    size = N_in_graph,
+    colour = LCC.signif), alpha = 0.7)  + 
+  scale_colour_brewer() + theme_light() + 
+  theme(panel.spacing = unit(0, "lines")) +
+  theme(axis.text.x = element_blank()) +
+  # scale_size(range = c(1, 10))+             ## to tune the size of circles
+  labs(x="", y="")  
+ggsave(q, filename = "../../fig/noncoex_orpha_heatmap.pdf", width = 10, height = 1.5)
+
+
+
+### barplot for significance
+bar = result_df  %>% ggplot(aes(name)) + geom_bar(aes(fill = LCC.signif), position = "stack") + theme_light() + scale_fill_brewer() + ylab("Significant Networks") + theme(axis.text.x = element_blank())
+ggsave(bar, filename = "../../fig/orpha_bar.pdf", width = 10, height = 1.5)
+
+### newer plot
+
+
+result_df_plot <- result_df %>% dplyr::select(name, network, tissue_broad, tissue, N_in_graph, LCC.signif)
+
+# non-brain coexpression
+result_df_coex_nonbrain <- result_df %>% 
+  dplyr::filter(!is.na(tissue), tissue_broad != "Brain")%>% # fct_explicit_na(LCC.signif) %>%
+  group_by(name, LCC.signif) %>% tally() %>% mutate(network = "Non-brain co-expression")
+
+#result_df_coex_nonbrain <- result_df %>% 
+#  filter(!is.na(tissue), tissue_broad != "Brain")%>% # fct_explicit_na(LCC.signif) %>%
+#  group_by(name, LCC.signif) %>% tally() 
+
+#result_df_coex_nonbrain <- result_df_coex_nonbrain %>% group_by(name, LCC.signif) %>% mutate(freq = n/sum(n)) 
+
+result_df_summary_coex_nonbrain = dcast(result_df_coex_nonbrain, name ~ LCC.signif, fill = 0)
+result_df_summary_coex_nonbrain$network = "non-brain co-expression"
+result_df_summary_coex_nonbrain = result_df_summary_coex_nonbrain %>% rowwise() %>%
+  mutate(signal = ifelse(`****`>0, "strong", ifelse(none == 40, "none", "weak")),
+         effect = ifelse(signal == "strong" & `****` > 25, "most", 
+                         ifelse(signal == "strong" & `****` > 5, "many", 
+                                ifelse(signal == "weak" &  `**` + `***` > 5, "many", 
+                                       ifelse(signal == "none", "none", "few")))))
+
+# brain coexpression
+result_df_coex_brain <- result_df %>% 
+  filter(!is.na(tissue), tissue_broad == "Brain")%>% # fct_explicit_na(LCC.signif) %>%
+  group_by(name, LCC.signif) %>% tally() %>% mutate(network = "Brain co-expression")
+
+result_df_summary_coex_brain = dcast(result_df_coex_brain, name ~ LCC.signif, fill = 0)
+result_df_summary_coex_brain$network = "Brain co-expression"
+result_df_summary_coex_brain = result_df_summary_coex_brain %>% rowwise() %>%
+  mutate(signal = ifelse(`****`>0, "strong", ifelse(none == 13, "none", "weak")),
+         effect = ifelse(signal == "strong" & `****` > 8, "most", 
+                         ifelse(signal == "strong" & `****` > 5, "many", 
+                                ifelse(signal == "weak" &  `**` + `***` > 5, "many", 
+                                       ifelse(signal == "none", "none", "few")))))
+
+# non-coexpression
+result_df_noncoex <- result_df %>% 
+  filter(is.na(tissue)) %>% # fct_explicit_na(LCC.signif) %>%
+  select(name, network, LCC.signif) %>% mutate(n = 1)
+
+result_df_summary_noncoex = dcast(result_df_noncoex, name ~ LCC.signif, fill = 0)
+
+result_df_summary_noncoex = result_df_summary_noncoex %>% rowwise() %>%
+  mutate(signal = ifelse(`****`>0, "strong", ifelse(none == 40, "none", "weak")),
+         effect = ifelse(signal == "strong" & `****` > 25, "most", 
+                         ifelse(signal == "strong" & `****` > 5, "many", 
+                                ifelse(signal == "weak" &  `**` + `***` > 5, "many", 
+                                       ifelse(signal == "none", "none", "few")))))
+
+
+## combine the results
+result_df_summary_all = rbind(result_df_coex_brain, result_df_coex_nonbrain, result_df_noncoex)
+result_df_summary_all$network = factor(result_df_summary_all$network)
+
+result_df_summary_all <-  result_df_summary_all %>% 
+  group_by(name, network) %>%
+  mutate(freq = n/sum(n))
+
+result_df_summary_all_expand = result_df_summary_all %>% select(-n) %>% #group_by(network) %>% 
+  spread(LCC.signif, freq, fill = 0) 
+
+networklevels = c("Co-essentiality", "Non-brain co-expression", "Brain co-expression", "Molecular function similarity",
+                  "Biological process similarity", "Protein-protein interaction" , "Pathway co-membership", "Mammalian phenotype similarity", "Human phenotype similarity")
+
+disease_coex_score = result_df_summary_all_expand %>% mutate(score = `*` + 2*`**` + 3*`***` + 4*`****`) %>% 
+  filter(network == "Non-brain co-expression") %>% arrange(score) 
+
+diseaselevels = disease_coex_score %>% pull(name) %>% as.character()
+
+source("~/Documents/projects/Multiome/functions/readdata_functions.R")
+orpha = process_disease_genes_data("~/Documents/projects/Multiome/Disease_gene_assoc/Orphanet/output/table_disease_gene_assoc_orphanet.tsv", 20, 2000)
+orpha_df = orpha$disgene_df[,c("name", "N")]
+
+
+result_df_summary_all_expand =  left_join(result_df_summary_all_expand, orpha_df, by = "name") %>% 
+  filter(network != "reactome_copathway_shared_over_5") %>%
+  ungroup %>% mutate(network = factor(network, levels = networklevels),
+                     name = factor(name, levels = diseaselevels))
+
+
+result_df_summary_all_expand_numeric =   result_df_summary_all_expand %>% mutate(name = as.numeric(name), network = as.numeric(network))
+
+library(scatterpie)
+ggplot(result_df_summary_all_expand) + geom_scatterpie(aes(x=long, y=lat, group=region), data=d,
+                                                       cols=LETTERS[1:4]) + coord_equal()
+
+ggplot() + geom_tile(fill = "white") + #facet_grid(tissue_broad ~., scales = "free", space = "free")  +## to get the rect filled
+  # geom_point(aes(size = N_in_graph*1.7),  colour = LCC.signif)  +   ## geom_point for circle illusion
+  geom_scatterpie_legend(data = result_df_summary_all_expand_numeric,
+                         aes(x= name, y = network, r = log10(N)),
+                         #  size = N_in_graph,
+                         cols = c("none","*","**","***", "****"), alpha = 1, color = NA)  + 
+  # geom_text(color = "red") +
+  #facet_wrap(~ network) +
+  scale_colour_brewer() + theme_light() + 
+  theme(panel.spacing = unit(0.25, "lines")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(breaks = 1:9, labels = networklevels) +
+  scale_x_continuous(breaks = 1:25, labels = diseaselevels) +
+  # scale_size(range = c(1, 10))+             ## to tune the size of circles
+  labs(x="", y="") + scale_fill_manual(values = c(c('#f1eef6','#bdc9e1','#74a9cf','#0570b0'), "grey"))
+
+################3
+# using geom scatterpie to group data and represent them
+
+
+```

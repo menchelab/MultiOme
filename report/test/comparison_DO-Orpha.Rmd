@@ -1,0 +1,102 @@
+---
+title: "DO and OrphaData disease group analysis"
+description: |
+  Disease groups based on orphaData and Disease Ontology to compare between complex and monogenic diseases.
+author:
+  - name: Pisanu Ize Buphamalai
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+```{r setup, include=FALSE}
+source("./functions/readdata_functions.R")
+DO = process_disease_genes_data("./Disease_gene_assoc/DO/output/DO_extracted_disease_group_symbol.tsv", 20,2000)
+Orpha = process_disease_genes_data("./Disease_gene_assoc/Orphanet/output/table_disease_gene_assoc_orphanet.tsv", 20,2000)
+```
+
+# How unique are disease groups? 
+
+```{r}
+DO_names = DO$disgene_df$name
+
+DO_sim_df = rbind(t(combn(DO_names, 2)), cbind(DO_names, DO_names)); colnames(DO_sim_df) = c("DO1","DO2")
+#DO_sim_df = expand.grid(DO_names, DO_names); colnames(DO_sim_df) = c("DO1","DO2")
+DO_sim_df = as_tibble(DO_sim_df)
+
+
+DO_sim_df = DO_sim_df %>% rowwise %>% mutate( 
+                   intersect = length(intersect(DO$disgene_list[[DO1]], DO$disgene_list[[DO2]])),
+                   union = length(union(DO$disgene_list[[DO1]], DO$disgene_list[[DO2]])),
+                   jaccard = intersect/union)
+
+
+                   
+```
+
+
+```{r}
+
+
+#compute hclust just to reorder 
+jaccard_mat = DO_sim_df %>% dcast(DO1 ~ DO2) %>% column_to_rownames(., var = "DO1")
+jaccard_mat[is.na(jaccard_mat)] = 0
+jaccard_mat = jaccard_mat + t(jaccard_mat)
+diag(jaccard_mat) = 1
+hclust_mat = hclust(dist(jaccard_mat))
+orders = hclust_mat$labels[hclust_mat$order]
+  
+
+flip = function(x){
+  if(x[1]>x[2]){
+    temp = x[1]
+    x[1] = x[2]
+    x[2] = temp
+  }
+  return(x)
+}
+
+#plot
+DO_sim_df = DO_sim_df %>% mutate(DO1 = factor(DO1,levels = orders),
+                                 DO2 = factor(DO2, levels  = orders)) 
+
+b = apply(DO_sim_df[,c("DO1", "DO2")], 1, flip) %>% t()
+DO_sim_df$DO1 = b[,1]
+DO_sim_df$DO2 = b[,2]
+
+DO_sim_df = DO_sim_df %>% filter(DO1 != DO2) %>% 
+  mutate(jaccardlevel = 
+  ifelse(jaccard < 0.2, "< 0.5", ifelse(
+         jaccard < 0.4, "< 0.7",  ifelse(
+         jaccard < 0.6, "< 0.9", "> 0.9")
+)))
+
+jaccardplot = ggplot(DO_sim_df, aes(DO1, DO2)) +
+geom_tile(aes(fill = jaccardlevel)) + scale_fill_manual(values = c("grey40", "pink","red", "darkred")) +#+ scale_fill_viridis_c() + #scale_fill_gradient2(low = "white", high = "blue") +
+#facet_grid(group~., scales = "free", space = "free") + #theme_light() +
+# theme(panel.spacing = unit(0, "lines")) +
+theme(#axis.text.x = element_text(angle = 90, hjust = 1),
+axis.text.x = element_blank(),
+panel.background = element_rect(fill = "transparent") # bg of the panel
+, plot.background = element_rect(fill = "transparent", color = NA) # bg of the plot
+# , panel.grid.major = element_blank() # get rid of major grid
+#, panel.grid.minor = element_blank() # get rid of minor grid
+, legend.background = element_rect(fill = "transparent") # get rid of legend bg
+, legend.box.background = element_rect(fill = "transparent") # get rid of legend panel bg
+) +
+# scale_size(range = c(1, 10))+             ## to tune the size of circles
+  labs(x="", y="")
+#ggsave(plot = jaccardplot, filename = "./analysis/network_characterisation/complementarity//jaccard_sim.pdf", width = 7, height = 6)
+
+
+jaccardplot
+
+#library(heatmaply)
+#jaccard_mat = DO_sim_df %>% dcast(DO1 ~ DO2) %>% column_to_rownames(., var = "DO1")
+#heatmaply(jaccard_mat, xlab = "DO1", ylab = "DO2", width = 3200, height = 2000)
+```
+
+
+```{r}
+
+```
+

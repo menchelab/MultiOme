@@ -1,0 +1,79 @@
+---
+title: "Tissue predisposition of diseases"
+description: |
+ An investigation of why some tissues are related to more diseases, in a conceptual way.
+author:
+  - name: Nora Jones 
+    url: https://example.com/norajones
+    affiliation: Spacely Sprockets
+    affiliation_url: https://example.com/spacelysprokets
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+```{r extract info from the original table if needed include=FALSE, eval=FALSE}
+# This chunk is taken from the LCC heatmap process report
+network_info = read_tsv("../data/network_details.tsv")
+
+source("../functions/process_LCC_result.R")
+
+result_df = readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.RDS"))
+  
+processed_result_df = process_LCC_result(result_df)
+  
+processed_result_df <- processed_result_df %>% mutate(LCC.signif = factor(LCC.signif, levels = rev(levels(LCC.signif))))
+
+
+tissues <- setdiff(levels(processed_result_df$subtype), processed_result_df %>% dplyr::filter(main_type != "Co-expression") %>% pull(subtype) %>% unique)
+```
+
+
+```{r match tissues & Germ layers}
+
+# tissue names (used for skipping chunk above)
+tissues <- c("Esophagus mucosa", "Lung", "Vagina", "Brain basal ganglia", 
+  "Colon transverse", "Heart atrial appendage", "Stomach", "Artery coronary", 
+  "Heart left ventricle", "Kidney cortex", "Lymphoblastoid cell line", 
+  "Skeletal muscle", "Skin", "Testis", "Adipose subcutaneous", 
+  "Artery aorta", "Intestine terminal ileum", "Liver", "Minor salivary gland", 
+  "Spleen", "Adipose visceral", "Adrenal gland", "Artery tibial", 
+  "Brain other", "Breast", "Gastroesophageal junction", "Pancreas", 
+  "Pituitary", "Prostate", "Thyroid", "Tibial nerve", "Whole blood", 
+  "Brain cerebellum", "Colon sigmoid", "Esophagus muscularis", 
+  "Fibroblast cell line", "Ovary", "Uterus")
+
+# coresponding germ layer type: En = endoderm, Me = mesoderm, Ec = ectoderm
+germ_layers <- c("En", "En", "Me", "Ec", "Me", "Me", "En", "Me", "Me", "Me", 
+                 "Me", "Me", "Ec", "Me", "Me", "Me", "En", "En", "Me", "En", "Me", 
+                 "Ec", "Me", "Ec", "Ec", "En", "En", "Ec", "Me", "En", "Ec", "Me", 
+                 "Ec", "Me", "Me", "Me", "Me", "Me")
+
+
+# counts per germ layer types
+counts <- table(germ_layers)
+
+# hypergeometric p-value for sliding window
+binned_pval <- function(bin_size = 5, group){
+  N = length(germ_layers)
+  m = counts[group]
+  count_bin <- sapply(1:(N-(bin_size-1)), function(i) sum(germ_layers[i:(i+(bin_size-1))] == group))
+  pvals <- sapply(count_bin, function(x) phyper(x, m, N-m, bin_size, lower.tail = F))
+  mlogpval <- -log10(pvals)
+  return(mlogpval)
+  }
+
+groups_pval <- sapply(names(counts), function(x) binned_pval(group = x))
+
+
+# transform into a df for plotting
+groups_pval_df <- as_tibble(groups_pval) %>% 
+  mutate(order = 1:n()) %>%
+  pivot_longer(., cols = names(counts)) %>% dplyr::filter(!is.infinite(value))
+
+ggplot(groups_pval_df, aes(x=order, y=value, col = name)) + 
+  geom_point() +
+  geom_smooth(method = "lm",  formula = y ~ poly(x, 15), se = FALSE) + 
+  geom_hline(yintercept = -log10(5e-2), col = "red", linetype = "dashed") + ylab("-log10(p-value)")
+```
+
+

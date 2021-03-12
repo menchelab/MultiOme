@@ -1,0 +1,46 @@
+network	type	main_type	subtype	source
+GOBP	Functional	Other	Biological Process	GO
+GOMF	Functional	Other	Molecular Function	GO
+HP	Phenotypic	Other	Human Phenotype	HPO
+MP	Phenotypic	Other	Mammalian Phenotype	MPO
+co-essential		Other	Co-essentiality	Kim et. al.
+ppi		Other	Protein-protein interaction	HIPPIE
+reactome_copathway		Other	Co-Pathway Membership	Reactome
+coex_GEJ	Co-expression	Co-expression	Gastroesophageal junction	GTEx
+coex_TST	Co-expression	Co-expression	Testis	GTEx
+coex_FIB	Co-expression	Co-expression	Fibroblast cell line	GTEx
+coex_SMU	Co-expression	Co-expression	Skeletal muscle	GTEx
+coex_EMS	Co-expression	Co-expression	Esophagus muscularis	GTEx
+coex_STM	Co-expression	Co-expression	Stomach	GTEx
+coex_BST	Co-expression	Co-expression	Breast	GTEx
+coex_WBL	Co-expression	Co-expression	Whole blood	GTEx
+coex_SKN	Co-expression	Co-expression	Skin	GTEx
+coex_ADS	Co-expression	Co-expression	Adipose subcutaneous	GTEx
+coex_LVR	Co-expression	Co-expression	Liver	GTEx
+coex_BRC	Co-expression	Co-expression	Brain cerebellum	GTEx
+coex_PRS	Co-expression	Co-expression	Prostate	GTEx
+coex_EMC	Co-expression	Co-expression	Esophagus mucosa	GTEx
+coex_THY	Co-expression	Co-expression	Thyroid	GTEx
+coex_SPL	Co-expression	Co-expression	Spleen	GTEx
+coex_PNC	Co-expression	Co-expression	Pancreas	GTEx
+coex_ATA	Co-expression	Co-expression	Artery aorta	GTEx
+coex_ARG	Co-expression	Co-expression	Adrenal gland	GTEx
+coex_UTR	Co-expression	Co-expression	Uterus	GTEx
+coex_ADV	Co-expression	Co-expression	Adipose visceral	GTEx
+coex_HRA	Co-expression	Co-expression	Heart atrial appendage	GTEx
+coex_HRV	Co-expression	Co-expression	Heart left ventricle	GTEx
+coex_CLT	Co-expression	Co-expression	Colon transverse	GTEx
+coex_CLS	Co-expression	Co-expression	Colon sigmoid	GTEx
+coex_LNG	Co-expression	Co-expression	Lung	GTEx
+coex_TNV	Co-expression	Co-expression	Tibial nerve	GTEx
+coex_ITI	Co-expression	Co-expression	Intestine terminal ileum	GTEx
+coex_VGN	Co-expression	Co-expression	Vagina	GTEx
+coex_ATC	Co-expression	Co-expression	Artery coronary	GTEx
+coex_BRB	Co-expression	Co-expression	Brain basal ganglia	GTEx
+coex_MSG	Co-expression	Co-expression	Minor salivary gland	GTEx
+coex_BRO	Co-expression	Co-expression	Brain other	GTEx
+coex_LCL	Co-expression	Co-expression	Lymphoblastoid cell line	GTEx
+coex_OVR	Co-expression	Co-expression	Ovary	GTEx
+coex_ATT	Co-expression	Co-expression	Artery tibial	GTEx
+coex_KDN	Co-expression	Co-expression	Kidney cortex	GTEx
+coex_PIT	Co-expression	Co-expression	Pituitary	GTEx

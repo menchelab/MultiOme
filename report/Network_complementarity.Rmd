@@ -1,0 +1,374 @@
+---
+title: "Complementarity the networks"
+description: |
+  The topological and functional complementarity of the compiled networks
+author:
+  - name: Pisanu Ize Buphamalai
+    affiliation: CeMM
+    affiliation_url: www.cemm.at 
+date: "`r Sys.Date()`"
+#output:
+#  html_document:
+#    code_folding: hide
+output: distill::distill_article
+---
+
+Disease modules, the hallmark concept for disease gene localization in network medicine, have been extensively studied on the PPI network. In this study, we expanded this concept across scales by incorporating additional databases that were selected to represent the multiscale biological relationships from genotypes to phenotypes. These multiscale network construction from databases of various formats including the bipartite mapping (e.g. the gene-pathway association), the ontology-based semantic similarity measurement (e.g. the Gene Ontology annotation), and correlation-based relationship extracted from quantitative studies such as GTEx expression data. These networks are complementary on different levels.
+
+
+
+# Topological complementarity
+
+In addition to the scale comprehensiveness, these networks are also topologically complementary. A number of key network properties including node and link coverage, modularity, assortativity, and social bias, have been compared and shown below.
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(igraph)
+library(patchwork, quietly = T)
+
+# compute different network properties
+if(!file.exists("../cache/network_complementarity_topological.RDS")){
+  # load required functions
+source("../source/network_properties_analysis.R")
+
+} else{
+  print("Load precomputed data")
+  g_prop_df <- readRDS("../cache/network_complementarity_topological.RDS")
+}
+
+network_details <- read_tsv("../data/network_details.tsv", col_types = 'ccccc')
+```
+
+# Some quantification
+
+```{r}
+edge_density = g_prop_df %>% dplyr::filter(property == "Edge density") %>% group_by(group) %>% summarise(layer_edge_density = mean(value))
+
+edge_density %>% arrange(layer_edge_density)
+```
+
+```{r}
+density <- g_prop_df %>% dplyr::filter(property == "Edge density") %>% pull(value)
+```
+
+
+# Assortativity
+```{r}
+g_prop_df %>% dplyr::filter(property == "Assortativity") %>% group_by(group) %>% summarise(assortativity = mean(value)) %>% arrange(assortativity)
+```
+
+
+
+```{r plot the results, fig.width=9, fig.height=2.5}
+
+# create a list of  plots to patch together
+plot = list()
+for(prop in unique(g_prop_df$property)){
+  plot[[prop]] = g_prop_df  %>% 
+    arrange(group) %>% filter(property == prop) %>%
+    ggplot( aes(x=group, y=as.numeric(value))) + 
+    geom_segment( aes(x=group, xend=group, y=0, yend=value), color="grey80", size=1.5) +
+    geom_violin(fill="#F8B100", alpha = 0.4, color = NA) +
+    geom_point( aes(color=alphaval), size=4, alpha=0.6) +
+    theme_light() + 
+    coord_flip() +
+    theme(
+      panel.grid.major.y = element_blank(),
+      panel.border = element_blank(),
+      axis.ticks.y = element_blank(),
+     # axis.text.y = element_blank(),
+    ) +
+    guides(color = F)+
+    xlab("") +
+    scale_color_manual(values = c("#F8B100",NA)) +
+    ylab(prop)
+  
+  # scale y log for some properties (n edges)
+  if(prop %in% c("Number of edges")){
+    plot[[prop]] = plot[[prop]] + scale_y_log10()
+  }
+  
+  # for the first plot, allows axis label
+  if(!prop %in% c("Number of nodes")){
+    plot[[prop]] = plot[[prop]] +  theme(axis.text.y = element_blank())
+  }
+  
+}
+
+plot_combine = plot$`Number of nodes` + plot$`Edge density` + plot$`Global clustering` + plot$Assortativity + plot$`Social bias` + plot_layout(nrow = 1)
+
+# uncomment to save the plot as pdf
+#ggsave("../Figs/network_properties_characterisation.pdf", plot_combine, height = 2.5, width = 9)
+
+suppressWarnings(print(plot_combine))
+```
+
+# The Social bias of the networks
+
+Many networks were constructed based on curation from literatures. We observe the social bias of these networks 
+
+```{r citation analysis, eval=FALSE}
+# plotting the degree citation, not executed
+degree_citation_df <- readRDS("../cache/degree_citation_correlation.RDS")
+
+scatter = ggplot(degree_citation_df$ppi) + geom_point(aes(x = count, y=degree, alpha = count/max(count))) + theme_cowplot() + scale_x_log10()+ scale_y_log10()
+
+
+bar = ggplot(degree_citation_df$ppi %>% mutate(group = cut(count, breaks = c(0,10,50,100,500, 10000), include.lowest = T))) + geom_boxplot(aes(x = group, y=degree)) + theme_cowplot() + scale_y_log10()
+
+scatter+ bar
+
+```
+
+#  The network similarity
+
+The similarity among all networks were computed through:
+
+ - Jaccard index similarity 
+ - Overlap index (the denominator is min(|A|),|B|) instad of |A U B|, better indicate the subset nature
+
+The MDS plot derived from Jaccard and Overlap Similarity is as follows:
+
+```{r mds jaccard compute and plot}
+
+# load the precomputed data
+if(!file.exists("../cache/network_jaccard_overlap_similarity_df.RDS")){
+  source("../source/compute_jaccard_similarity.R")
+} else{
+  print("load pre-computed network similarity data")
+  network_sim_df <- readRDS("../cache/network_jaccard_overlap_similarity_df.RDS")
+}
+
+#plot
+# turn df to weight symmatrix matrix through graph
+g_jaccard <- graph_from_data_frame(network_sim_df[,1:3] %>% rename(., weight = jaccardIndex), directed = F)
+
+dist_jaccard <- get.adjacency(g_jaccard, attr = "weight")
+
+diag(dist_jaccard) = 1
+
+#change similarity to distance
+dist_jaccard = 1 - dist_jaccard 
+
+############
+# MDS plot normal 
+library(ggrepel)
+
+
+#### MDS plot for Kruskal
+library(MASS)
+mds<- isoMDS(as.matrix(dist_jaccard), k = 2)
+library(ggrepel)
+
+# a data frame of MDS values
+mds_df = data.frame(x = mds$points[,1], y = mds$points[,2], network = rownames(mds$points))
+
+# add network metadata and node size
+mds_df = mds_df %>%
+  left_join(., g_prop_df %>% dplyr::filter(property=="Number of nodes") %>% select(network, value)) %>%
+  left_join(., network_details) %>%
+  dplyr::filter(!is.na(main_type)) %>%
+  mutate(label = ifelse(!grepl("coex", network), subtype, ""),
+        # collabel = ifelse(!is.na(type), type, subtype)
+         )
+
+
+p <- mds_df %>% 
+  ggplot() + 
+  geom_point(aes(x, y, col = main_type, size = value), alpha = 0.5) + 
+  geom_text_repel(aes(x, y, label = label)) + 
+  theme_cowplot() +theme(
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank(),
+    axis.ticks.y=element_blank(),
+    axis.text.y=element_blank()) + 
+  xlab("MDS1") + ylab("MDS2") +
+  scale_color_manual(values = c("#F8B100", "#005564"))+
+  guides(col = F, size  = F)
+
+
+p
+
+#ggsave("../Figs/scatter_Network_complementarity_MDS_Jaccard.pdf",plot = p, width = 4, height = 4)
+ 
+```
+
+The MDS plot based on the overlap index shown below:
+
+```{r mds overlap compute and plot}
+#plot
+# turn df to weight symmatrix matrix through graph
+g_overlap <- graph_from_data_frame(network_sim_df[,c(1,2,4)] %>% rename(., weight = overlapindex), directed = F)
+
+sim_overlap <- get.adjacency(g_overlap, attr = "weight")
+
+diag(sim_overlap) = 1
+
+#change similarity to distance
+dist_overlap = 1 - sim_overlap 
+
+############
+# MDS plot normal 
+library(ggrepel)
+
+
+#### MDS plot for Kruskal
+library(MASS)
+mds<- isoMDS(as.matrix(dist_overlap), k = 2)
+library(ggrepel)
+
+# a data frame of MDS values
+mds_df = data.frame(x = mds$points[,1], y = mds$points[,2], network = rownames(mds$points))
+
+# add network metadata and node size
+mds_df = mds_df %>%
+  left_join(., g_prop_df %>% dplyr::filter(property=="Number of nodes") %>% select(network, value)) %>%
+  left_join(., network_details) %>%
+  dplyr::filter(!is.na(main_type)) %>%
+  mutate(label = ifelse(!grepl("coex", network), subtype, ""),
+        # collabel = ifelse(!is.na(type), type, subtype)
+         )
+
+# plot the scatters of all networks
+p <- mds_df %>% 
+  ggplot() + 
+  geom_point(aes(x, y, col = main_type, size = value), alpha = 0.5) + 
+  geom_text_repel(aes(x, y, label = label)) + 
+  theme_cowplot() +theme(
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank(),
+    axis.ticks.y=element_blank(),
+    axis.text.y=element_blank()) + 
+  xlab("MDS1") + ylab("MDS2") +
+  scale_color_manual(values = c("#F8B100", "#005564"))+
+  guides(col = F, size  = F)
+
+
+p
+
+#ggsave("../Figs/scatter_Network_complementarity_MDS_Overlap.pdf",plot = p, width = 4, height = 4)
+```
+## Network of the similarity
+
+```{r}
+network_sim_df %>% pull(overlapindex) %>% summary
+network_sim_df %>% pull(overlapindex) %>% sd
+```
+
+# Overlap between co-expression and non co-expression networks
+```{r}
+# overlap between co-expression networks
+network_sim_df %>% dplyr::filter(grepl("coex", V1), grepl("coex", V2)) %>% pull(overlapindex) %>% median
+
+# overlap between non co-expression networks
+network_sim_df %>% dplyr::filter(!grepl("coex", V1), !grepl("coex", V2)) %>% pull(overlapindex) %>% median
+```
+
+
+## set cutoffs and make network images
+```{r}
+library(ggraph)
+library(tidygraph)
+
+# full network connection
+# network similarity
+net_sim_core <- network_sim_df  %>% dplyr::filter(overlapindex > 0.01, !grepl("coex",V1)|grepl("core", V1), !grepl("coex",V2)|grepl("core", V2))
+
+graph <- as_tbl_graph(net_sim_core) %>% 
+    mutate(Popularity = centrality_degree())
+
+# plot using ggraph
+ggraph(graph, layout = 'kk') + 
+    geom_edge_fan(aes(alpha = stat(index),  edge_width = overlapindex), show.legend = FALSE) + 
+    geom_node_point(aes(size = Popularity)) + 
+  geom_node_text(aes(label = name)) +
+ #   facet_edges(~year) + 
+    theme_graph(foreground = 'steelblue', fg_text_colour = 'white')
+```
+
+```{r}
+# represent as heatmap
+net_sim_core <- network_sim_df  %>% dplyr::filter(!grepl("coex",V1)|grepl("core", V1), !grepl("coex",V2)|grepl("core", V2))
+
+ggplot(net_sim_core) + geom_tile(aes(x = V1, y = V2, fill = (overlapindex))) + scale_fill_distiller(direction = -1)
+```
+```{r}
+
+```
+
+
+
+```{r}
+mds_df %>% dplyr::filter(grepl("coex", network)) %>%
+  ggplot() + 
+  geom_point(aes(x, y, col = main_type, size = value), alpha = 0.5) + 
+  geom_text_repel(aes(x, y, label = subtype)) + 
+  theme_cowplot() +theme(
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank(),
+    axis.ticks.y=element_blank(),
+    axis.text.y=element_blank()) + 
+  xlab("MDS1") + ylab("MDS2") +
+  scale_color_manual(values = c("#F8B100", "#005564"))+
+  guides(col = F, size  = F) + ggtitle("overlap index of co-expression network")
+```
+
+
+The Jaccard and Overlap Index of all networks in details are shown as heatmap below
+
+```{r, heatmap_similarity_allnetwork_jaccard}
+## Jaccard heatmap
+
+## remove coex_core from the map
+p1 = network_sim_df[,1:3] %>% dplyr::filter(!grepl("core", V1), !grepl("core", V2)) %>% 
+  # heatmap plot
+  ggplot() + geom_tile(aes(x = V1, y = V2, fill = jaccardIndex)) + scale_fill_distiller(direction = 1) + xlab("") +ylab("") + ggtitle("Jaccard similarity among all networks") + theme_minimal()+ theme(axis.text.x = element_text(angle = 90))
+
+p1
+```
+
+
+```{r, heatmap_similarity_allnetwork_overlap}
+p2 = network_sim_df[,c(1,2,4)] %>% dplyr::filter(!grepl("core", V1), !grepl("core", V2)) %>% 
+  # heatmap plot
+  ggplot() + geom_tile(aes(x = V1, y = V2, fill = overlapindex)) + scale_fill_distiller(direction = 1) + xlab("") +ylab("") + ggtitle("Overlap similarity among all networks") + theme_minimal() + theme(axis.text.x = element_text(angle = 90))
+```
+
+
+# Similarity with core transcriptional modules
+
+Now using the core transcriptional modules to represent all of the co-expression network. The heatmap below shows the Jaccard and Overlap similarity.
+
+```{r heatmap_similarity_network}
+## remove coex_core from the map
+considered_networks = c("coex_core", "reactome_copathway", "ppi", "MP", "HP", "GOMF", "GOBP")
+
+labels = c("co-expression", "co-pathway", "PPI", "MP", "HP", "GOMF", "GOBP ")
+
+p1 = network_sim_df[,1:3] %>% dplyr::filter(V1 %in% considered_networks, V2 %in% considered_networks ) %>% 
+  # rescale factor
+  mutate(V1 = factor(V1, levels = considered_networks, labels = labels),
+         V2 = factor(V2, levels = considered_networks, labels = labels)) %>%
+  # heatmap plot
+  ggplot() + geom_tile(aes(x = V1, y = V2, fill = jaccardIndex)) + scale_fill_distiller(direction = 1) + xlab("") +ylab("") + ggtitle("Jaccard similarity") + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+p1
+```
+
+```{r heatmap_similarity_network_overlap}
+overlap_df <- network_sim_df[,c(1,2,4)] %>% dplyr::filter(V1 %in% considered_networks, V2 %in% considered_networks ) %>% 
+  # rescale factor
+  mutate(V1 = factor(V1, levels = considered_networks, labels = labels),
+         V2 = factor(V2, levels = considered_networks, labels = labels))
+
+  # heatmap plot
+p2 = ggplot(overlap_df) + geom_tile(aes(x = V1, y = V2, fill = overlapindex)) + scale_fill_distiller(direction = 1) + xlab("") +ylab("") + ggtitle("overlap similarity ") + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+p2
+```
+
+```{r}
+sprintf("average overlap index for all networks are %f", mean(overlap_df$overlapindex))
+```
+

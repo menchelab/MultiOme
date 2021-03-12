@@ -1,0 +1,155 @@
+---
+title: "LCC analysis on new coex networks"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+# library and configurations
+
+library(tidyverse)
+library(ggrepel)
+library(knitr)
+
+# for printing (cm)
+A4width = 21
+A4height = 29.7
+
+
+# load  network labels
+network_info = read_tsv("../data/network_details.tsv")
+
+source("../functions/process_LCC_result.R")
+
+# defines colours used in the heatmap
+cols = RColorBrewer::brewer.pal(5, "Blues")
+cols = cols[2:5]
+
+pacman::p_load_gh("nightingalehealth/ggforestplot")
+
+## a function for heatmap plotting
+LCC_heatmap_plot = function(result_folder, heatmap_file){
+  #' @input result_folder: folder where LCC files were saved
+  #' @input heatmap_file: file where the heatmap is to be saved
+  
+  ## process the results LCC significance
+  result_df = readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.RDS"))
+  
+  processed_result_df = process_LCC_result(result_df)
+  
+  processed_result_df <- processed_result_df %>% mutate(LCC.signif = factor(LCC.signif, levels = rev(levels(LCC.signif))))
+  
+  p <- processed_result_df  %>% dplyr::filter(LCC.signif != "none") %>%
+    ggplot(aes(name, subtype)) + geom_tile(fill = "white") + facet_grid(.~main_type, space = "free", scale = "free")  +## to get the rect filled
+    # geom_point(aes(size = N_in_graph*1.7),  colour = LCC.signif)  +   ## geom_point for circle illusion
+     geom_stripes(odd = "grey90", even = "#00000000") +
+  #  theme_light() + 
+   # theme_forest() +
+    theme_minimal_hgrid() +
+    theme(panel.spacing = unit(0.25, "lines"),
+          axis.text.x = element_text(angle = 90, hjust = 1), 
+          panel.grid.major.y = element_line(colour="grey", linetype="dotted")) +
+      geom_point(aes(
+      size = log10(N_in_graph),
+      fill = LCC.signif,
+      colour = LCC.signif), alpha = 0.7)  + 
+    scale_color_manual(values = cols) +
+    # scale_size(range = c(1, 10))+             ## to tune the size of circles
+      coord_flip() +
+    labs(x="", y="") + guides(size = F)
+  
+  #ggsave(p, filename = paste0("../../fig/coex_Orphanet_heatmap",folder, ".pdf"), width = 10, height = 10)
+  ggsave(heatmap_file, plot = p, width = 1.5*0.5*A4width, height = 1.5*0.175*A4height)
+}
+
+```
+
+## Heatmap plot: roots: all diseases
+
+```{r fig.cap="A caption", out.width = '100%'}
+rare_result_folder = "../cache/output/Orphageneset/"
+rare_heatmap_file = "../Figs/heatmap_network_disease_association_orphanets_all_rare_diseases.pdf"
+
+if(!file.exists(rare_heatmap_file)){
+  LCC_heatmap_plot(rare_result_folder, rare_heatmap_file)
+}
+
+
+knitr::include_graphics(rare_heatmap_file)
+```
+
+## Roots: rare genetic diseases
+
+```{r}
+rare_genetic_result_folder = "../cache/output/Orphageneset_rare/"
+rare_genetic_heatmap_file = "../Figs/heatmap_network_disease_association_orphanets_genetic_rare_diseases.pdf"
+
+if(!file.exists(rare_genetic_heatmap_file)){
+  LCC_heatmap_plot(rare_genetic_result_folder, rare_genetic_heatmap_file)
+}
+
+knitr::include_graphics(rare_genetic_heatmap_file)
+```
+
+
+# bar plot for the number of diseases/tissues
+```{r eval = FALSE, echo = FALSE} 
+# number of significant diseases
+library(scales)
+
+result_df = readRDS(paste0("../cache/output/Orphageneset_rare/", "LCC_and_distance_calculation_results.RDS")) %>% process_LCC_result(.) %>% mutate(LCC.signif = factor(LCC.signif, levels = rev(levels(LCC.signif))))
+
+ntissue_per_disease = result_df %>% dplyr::filter(LCC.signif!="none") %>% count(name, LCC.signif) #%>% mutate(name = factor(name, levels = levels_name))
+
+ggplot(ntissue_per_disease, aes(x = name, y = n, fill = LCC.signif)) + geom_bar(stat = "identity") +  scale_fill_manual(values = cols) + theme_minimal_vgrid() + theme(axis.text.y = element_blank()) + ylab("number of tissues") + coord_flip() + scale_y_continuous(breaks= pretty_breaks())
+
+ggsave("../Figs/barplot_ntissue_per_disease_for_heatmap_network_disease_association_orphanets_genetic.pdf", width = 0.25*1.1*0.5*A4width, height = 1.1*0.175*A4height)
+```
+
+
+```{r eval = FALSE, echo = FALSE}
+# number of significant diseases
+ndisease_per_tissue = result_df %>% dplyr::filter(LCC.signif!="none") %>% count(network, LCC.signif, main_type) %>% mutate(network = fct_reorder(network, n, sum, .desc = T))
+
+
+ggplot(ndisease_per_tissue, aes(x = network, y = n, fill = LCC.signif)) + geom_bar(stat = "identity")  +  scale_fill_manual(values = cols)+ theme_minimal_hgrid() + ylab("number of disease groups") + scale_y_continuous(breaks= pretty_breaks()) + theme(axis.text.x = element_blank())  + facet_grid(.~main_type, space = "free", scale = "free") 
+
+ggsave("../Figs/barplot_ndisease_per_tissue_for_heatmap_network_disease_association_orphanets_genetic.pdf", width = 1.1*0.5*A4width, height = 0.35*1.1*0.175*A4height)
+```
+
+
+# The analysis of the number of tissues to the significance
+
+- does the total number of genes in the set influent the total networks?
+- age of onset? -> how to deal with the irregularity of the datra: not direct gene to disease to n network, but rather average values?
+
+```{r eval = FALSE, echo = FALSE}
+# is the number of significant tissues influenced by the number of genes in the disease set?
+setwd("~/Documents/projects/Multiome/")
+source("./functions/readdata_functions.R")
+Orphanet_dat = process_disease_genes_data("./Disease_gene_assoc/Orphanet/output/table_disease_gene_assoc_orphanet.tsv", min_gene = 20, max_gene = 2000)
+
+Orphanet_df = Orphanet_dat$disgene_df
+```
+
+
+```{r eval = FALSE, echo = FALSE}
+N_signif_net = result_df %>% group_by(name) %>% dplyr::filter(LCC.signif) %>% count() %>% rename(significant_tissues = n)
+
+Orphanet_df = left_join(Orphanet_df, N_signif_net)
+
+library(ggrepel)
+p =  ggplot(Orphanet_df, aes(x = N, y = significant_tissues, label = ifelse(N > 700, name, ""))) + geom_point() + scale_x_log10()+ ggtitle("There is no strong relationship", subtitle = "between gene set size and number of significant tissues") + theme_cowplot() + xlab("Number of associated genes") + ylab("Number of significant tissues") + geom_text_repel()
+
+  ggsave("./Figs/scatter_SignificantTissues_Ngenes.pdf", p, width = 0.25*A4width, height = 0.125*A4height)
+```
+
+
+```{r eval = FALSE, echo = FALSE}
+p = ggplot(result_df, aes(x = N_in_graph, y = LCC.zscore)) + geom_point() + ggtitle("There is no strong relationship", subtitle = "between gene set size and number of significant tissues") + theme_cowplot() + xlab("Number of genes in the network") + ylab("LCC z-score") + theme(legend.position = "bottom")  + facet_wrap(.~name, ncol =3, scales = "free")
+
+ ggsave("./Figs/scatter_SignificantTissues_Ngenes_per_disease.pdf", p, width = 0.5*A4width, height = 0.5*A4height)
+```
+
+

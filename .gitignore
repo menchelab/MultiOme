@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+analysis/
+networks/
+Figs/
+trials/
+cache/
+data/network_node2vec_results
