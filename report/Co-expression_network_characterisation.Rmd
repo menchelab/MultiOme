@@ -1,7 +1,18 @@
 ---
-title: "coexpression network anlysis"
-output: html_notebook
+title: "Co-expression network characterisation"
+author:
+  - name: Pisanu Ize Buphamalai
+    affiliation: CeMM & Max Perutz Lab Vienna
+    affiliation_url: www.cemm.at 
+date: "`r Sys.Date()`"
+output:
+  distill::distill_article:
+    code_folding: true
+
 ---
+
+We characterised our tissue-specific co-expression networks based on GTEx. Our hypothesis is that genes that are highly co-expression across all tissues are likely required for cellular developments and survival, and should show a strong correlation with of essentiality. In this analysis, we downloaded the list of human essential genes from the [OGEE database (v2)]( http://ogee.medgenius.info), also included in `/data/OGEE_esential_genes_20190416.txt`. 
+
 
 
 ```{r}
@@ -10,35 +21,22 @@ output: html_notebook
 
 # 0 - load required data
 ## load coexel sum
-coex_el_sum = readRDS("../cache/coexpression_raw_edge_counts.RDS")
+library(pacman)
+p_load(tidyverse, cowplot, knitr)
 
-## essential genes
-source("../functions/fn_source.R")
-essential_genes = read_tsv("../data/OGEE_esential_genes_20190416.txt")
-essential_genes$geneSymbol = IDconvert(essential_genes$locus, from = "ENSEMBL", to = "SYMBOL")
-essential_genes_sym = essential_genes %>% filter(essential == "E") %>% pull(geneSymbol) %>% unique()
-
-
-# bar plot
-changelabel = function(x){gsub("\\(","", gsub("\\]", "", gsub(",","-", x)))} # change open-close values in bins
-
-
-coex_el_sum$A.essential = coex_el_sum$A %in% essential_genes_sym
-coex_el_sum$B.essential = coex_el_sum$B %in% essential_genes_sym
-coex_el_sum = coex_el_sum %>% mutate(essential_edge_score = A.essential + B.essential)
-coex_el_sum = coex_el_sum %>% mutate(n_binned = cut(n, breaks = c(seq(0,30,5), 38)))
-
-coex_el_sum_grouped = coex_el_sum  %>% group_by(n_binned, essential_edge_score) %>% count()
-coex_el_sum_grouped = coex_el_sum_grouped %>% mutate(
-  n_binned_relabel = factor(changelabel(n_binned), levels =  changelabel(levels(n_binned))),
-  score = as.character(essential_edge_score))
-# %>% mutate(
-# score = factor(score, labels = c("none", "one", "both"), ordered = T )
-#)
-
+coex_el_sum_grouped = readRDS("../cache/coexpression_edge_counts_by_group.RDS")
 
 # create a vector of total probability for each class
-coex_el_sum_score  = coex_el_sum_grouped %>% ungroup() %>% group_by(essential_edge_score) %>% summarise(count = sum(n)) %>% pull(count, name = essential_edge_score)
+coex_el_sum_score  = coex_el_sum_grouped %>% 
+  ungroup() %>% 
+  group_by(essential_edge_score) %>% 
+  summarise(count = sum(n)) %>% pull(count, name = essential_edge_score)
+
+coex_el_sum_grouped %>% 
+  dplyr::rename(n_tissues = n_binned_relabel) %>%
+  group_by(n_tissues) %>%
+  summarise(n_edges = sum(n), percent =  sum(n)*100/sum(coex_el_sum_score)) %>%
+  kable
 ```
 
 # Visualisation of the binned values
@@ -54,30 +52,23 @@ bar_essential
 #ggsave("./Figs/essentiality_co-expression.pdf", bar_essential, width = 4, height = 4)
 ```
 
-```{r edge count}
+```{r edge count in absolute value, include=FALSE, eval=FALSE}
 ## save absolute values for number of edges in each bin
-coex_bin_count = coex_el_sum_grouped %>% group_by(n_binned_relabel) 
-
+coex_bin_count = coex_el_sum_grouped %>% 
+  group_by(n_binned_relabel) %>% 
+  dplyr::rename(count = n)
 
 EE_count <- coex_el_sum %>% ungroup() %>% count(n_binned, essential_edge_score)
 
-coex_bin_count_plot = ggplot(coex_bin_count) + geom_bar(aes(x = n_binned_relabel, y = count/1e3), stat = "identity", alpha = 0.7) +
-  xlab("") + ylab("edge count") + theme_cowplot() + scale_y_log10(breaks = c(1,10,100,1000,10000), labels = c("1k","10k","100k","1M", "10M")) 
 
 coex_bin_count_plot = ggplot(coex_bin_count) + geom_bar(aes(x = n_binned_relabel, y = count), stat = "identity", alpha = 0.7) +
-  xlab("") + ylab("edge count") + theme_cowplot() + scale_y_log10() 
+  xlab("Tissues") + ylab("edge count") + theme_cowplot() #+ scale_y_log10() 
 
-ggsave("./analysis/network_characterisation/essentiality/edge_count_coex.pdf", coex_bin_count_plot, width = 6,height = 2)
-
-
-#coex_bin_count_not_binned = coex_el_sum %>% ungroup %>% count(n)
-
-coex_bin_count_plot = ggplot(coex_bin_count) + geom_bar(aes(x = n_binned_relabel, y = count), stat = "identity", alpha = 0.7) +
-  xlab("") + ylab("edge count") + theme_cowplot() + scale_y_log10() 
-ggsave("./analysis/network_characterisation/essentiality/edge_count_coex_tall.pdf", coex_bin_count_plot, width = 6,height = 3)
+coex_bin_count_plot
+```
 
 
-
+```{r assessment, include=FALSE, eval=FALSE}
 #### Perform hypergeometric distribution of the combination
 coex_bin_both_essential = coex_el_sum_grouped %>% filter(essential_edge_score==2) %>% select(n_binned_relabel, n)
 coex_bin_not_essential = coex_el_sum_grouped %>% filter(essential_edge_score<2) %>% group_by(n_binned_relabel) %>% summarise(n_non = sum(n))
@@ -189,7 +180,7 @@ coex_el_sum_stat = coex_el_sum_stat %>% rowwise() %>%
 ```
 
 
-```{r}
+```{r assessment2, include=FALSE, eval=FALSE}
 # Feb 2021
 pval_test_from_obs = function(group, method = "binomial"){
   # this counts from the population

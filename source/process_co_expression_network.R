@@ -1,8 +1,11 @@
 ################################################
-#' the disparity filter network with specificity
-#' set a cutoff of edges after applying disparity filter
-# rationale: edges strongly identified to be in many networks are perhaps interactions between house keeping genes and not a part of tissue specific mechanisms
-
+#' coe-expression network post-processing characterisation
+#' 
+#' The co-expression edges, after disparity filter were labelled with 
+#' 1) whether they are from essential gene pairs
+#' 2) how many tissues they appear in
+#' 3) set a cutoff of for specificity: edges appear for over a certain number of tissues does not show tissue specific signal
+#' this number was set to 5 (allowing some redundancy for tissues that are related)
 
 
 # 0 - load the co-expression data --------------
@@ -18,11 +21,40 @@ for(i in list.files(coex_folder)){
 
 
 # 1 - combine edges from all tissues and count occurrences --------------
-dat_combn = bind_rows(dat)
-dat_combn= dat_combn %>% mutate_if(is.character,as.factor)
-dat_combn_unique = dat_combn %>% group_by(A,B) %>% count()
+coex_el_sum = bind_rows(dat)
+coex_el_sum = coex_el_sum %>% mutate_if(is.character,as.factor)
+# count the number of tissue each edge emerges
+coex_el_sum = coex_el_sum %>% group_by(A,B) %>% count()
 
-saveRDS(dat_combn_unique, "./cache/coexpression_raw_edge_counts.RDS")
+
+#2 - incorporate essential genes data
+source("../functions/fn_source.R")
+essential_genes = read_tsv("../data/OGEE_esential_genes_20190416.txt")
+essential_genes$geneSymbol = IDconvert(essential_genes$locus, from = "ENSEMBL", to = "SYMBOL")
+essential_genes_sym = essential_genes %>% filter(essential == "E") %>% pull(geneSymbol) %>% unique()
+
+# annodate whether each node is an essential gene, and whether the pair is both essential
+coex_el_sum$A.essential = coex_el_sum$A %in% essential_genes_sym
+coex_el_sum$B.essential = coex_el_sum$B %in% essential_genes_sym
+coex_el_sum$essential_edge_score = coex_el_sum$A.essential + coex_el_sum$B.essential
+
+# group occurrences by increment of five tissues
+coex_el_sum$n_binned = cut(coex_el_sum$n, breaks = c(seq(0,30,5), 38))
+
+saveRDS(coex_el_sum, "../cache/coexpression_raw_edge_counts.RDS")
+
+#- store the value by group
+
+# change label from domain-range expression for readibility
+changelabel = function(x){gsub("\\(","", gsub("\\]", "", gsub(",","-", x)))} 
+
+coex_el_sum_grouped = coex_el_sum  %>% ungroup %>% group_by(n_binned, essential_edge_score) %>% count()
+
+coex_el_sum_grouped = coex_el_sum_grouped %>% mutate(
+  n_binned_relabel = factor(changelabel(n_binned), levels =  changelabel(levels(n_binned))),
+  score = as.character(essential_edge_score))
+
+saveRDS(coex_el_sum_grouped, "../cache/coexpression_edge_counts_by_group.RDS")
 
 
 # 2 - set a cut off for a maixum network to tolerate --------------
@@ -51,46 +83,3 @@ for(i in names(dat)){
 }
 
 
-##############
-
-# 
-# # new coex by group (without disparity filter)
-# 
-# coex_folder = "~/Documents/projects/Multiome/networks/gtex_coexpresssion/edgelists/new_coex_by_group//"
-# 
-# dat = list()
-# for(i in list.files(coex_folder)){
-#   tissue_name = str_remove(i, ".tsv")
-#   
-#   dat[[tissue_name]] = read_tsv(paste0(coex_folder, i), col_types = "cc")
-#   colnames(dat[[tissue_name]]) = c("A","B")
-# }
-# 
-# dat_combn = bind_rows(dat)
-# dat_combn= dat_combn %>% mutate_if(is.character,as.factor)
-# colnames(dat_combn) =  c("A","B")
-# dat_combn_unique = dat_combn %>% group_by(A,B) %>% count()
-# 
-# # set a cut off for a maixum network to tolerate
-# cutoff = 5
-# dat_combn_pass = dat_combn_unique[dat_combn_unique$n <= cutoff, c("A","B")]
-# 
-# # publish the new sets of networks
-# for(i in names(dat)){
-#   print(i)
-#   dat_pass = inner_join(dat[[i]], dat_combn_pass,  by = c("A", "B"))
-#   write_tsv(dat_pass, paste0("~/Documents/projects/Multiome/networks/gtex_coexpresssion/edgelists/coex_group38_cor075_cut5/",i,".tsv"))
-# }
-# 
-# ######## cutoff of ten
-# 
-# # set a cut off for a maixum network to tolerate
-# cutoff = 10
-# dat_combn_pass = dat_combn_unique[dat_combn_unique$n <= cutoff, c("A","B")]
-# 
-# # publish the new sets of networks
-# for(i in names(dat)[34:38]){
-#   print(i)
-#   dat_pass = inner_join(dat[[i]], dat_combn_pass,  by = c("A", "B"))
-#   write_tsv(dat_pass, paste0("~/Documents/projects/Multiome/networks/gtex_coexpresssion/edgelists/coex_group38_cor075_cut5/",i,".tsv"))
-# }
