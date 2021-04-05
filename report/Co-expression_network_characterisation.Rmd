@@ -1,15 +1,8 @@
----
-title: "Co-expression network characterisation"
-author:
-  - name: Pisanu Ize Buphamalai
-    affiliation: CeMM & Max Perutz Lab Vienna
-    affiliation_url: www.cemm.at 
-date: "`r Sys.Date()`"
-output:
-  distill::distill_article:
-    code_folding: true
 
----
+# Co-expression network characterisation
+
+
+## Core- and tissue-specific co-expression
 
 We characterised our tissue-specific co-expression networks based on GTEx. Our hypothesis is that genes that are highly co-expression across all tissues are likely required for cellular developments and survival, and should show a strong correlation with of essentiality. In this analysis, we downloaded the list of human essential genes from the [OGEE database (v2)]( http://ogee.medgenius.info), also included in `/data/OGEE_esential_genes_20190416.txt`. 
 
@@ -39,7 +32,7 @@ coex_el_sum_grouped %>%
   kable
 ```
 
-# Visualisation of the binned values
+The plot for higher essentiality aas number of genes increased is shown below.
 
 ```{r bar plot essentiality per tissue pinning}
 bar_essential = ggplot(coex_el_sum_grouped) + 
@@ -51,6 +44,15 @@ bar_essential = ggplot(coex_el_sum_grouped) +
 bar_essential
 #ggsave("./Figs/essentiality_co-expression.pdf", bar_essential, width = 4, height = 4)
 ```
+
+```{r}
+coex_el_sum = readRDS("../cache/coexpression_raw_edge_counts.RDS") %>% ungroup
+coex_el_sum_by_tissue <- coex_el_sum %>% 
+  count(n, essential_edge_score, name = "count")
+```
+
+
+
 
 ```{r edge count in absolute value, include=FALSE, eval=FALSE}
 ## save absolute values for number of edges in each bin
@@ -197,7 +199,11 @@ result_node_binom_from_obs = sapply(unique(coex_el_sum_grouped$n_binned), functi
 
 
 #=======================
-# Nodes and edges for each group
+#2 - incorporate essential genes data
+source("../functions/fn_source.R")
+essential_genes = read_tsv("../data/OGEE_esential_genes_20190416.txt")
+essential_genes$geneSymbol = IDconvert(essential_genes$locus, from = "ENSEMBL", to = "SYMBOL")
+essential_genes_sym = essential_genes %>% filter(essential == "E") %>% pull(geneSymbol) %>% unique()
 
 
 # new implementation
@@ -257,6 +263,9 @@ pval_test_node = function(group, method = "binomial"){
 
 result_node_binom = sapply(unique(coex_el_sum_grouped$n_binned), function(x) pval_test_node(x))
 result_node_phyper = sapply(unique(coex_el_sum_grouped$n_binned), function(x) pval_test_node(x, method = "hypergeom"))
+
+
+
 
 
 ```

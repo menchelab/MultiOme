@@ -1,11 +1,17 @@
 ---
-title: 
+title: Embedding result
 description: |
   Embedding results for rare genetic diseases
 author:
   - name: Pisanu Ize Buphamalai
+    affiliation: CeMM & Max Perutz Lab Vienna
+    affiliation_url: www.cemm.at 
 date: "`r Sys.Date()`"
-output: distill::distill_article
+output:
+  distill::distill_article:
+    toc: true
+    toc_depth: 2
+    code_folding: true 
 ---
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 

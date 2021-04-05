@@ -1,0 +1,49 @@
+# Patients level prioritization
+
+In clinical settings, an approximate number of X potential causal variants are obtained after a rare disease patient underwent exome sequencing. With additional stringent pathogenecity evaluation, x% of those variants are filtered out. Yet, there remains 100-x% which regarded as high confidence [cite]. We earlier showed that our informed multiplex propagation is a powerful tool for improving the retrieval rate of disease causal genes. We propose that it can also act as an additional evaluation metric for patients' variant prioritization. 
+As a test scenario, we obtained variant lists from five rare disease patients with neurological symptoms. The causal variant for each patient has already been validated and we can therefore use them for benchmarking.
+
+
+```{r}
+variants <- read_csv("../data/variants_list/patient_01.csv")
+
+# remove NA entries that may have created during file reading
+variants <- variants[!is.na(variants$SYMBOL),]
+
+knitr::kable(variants)
+```
+
+This patient are diagnosed, i.e. has a confirmed causal variant. We wonder whether the causal gene can be picked up by tha algorithm. The patient are presented with symptoms belonging to rare genetic neurological disorder, and we used the 10-fold CV retrieval result for this disease group to rank  the genes based on their average visiting probability.  We incorporated additional columns to the variant sets: the average visiting probability (from 10-fold CV), the corresponding global rank (from the entire genome) and the local rank (rank of the gene for the paitent).
+
+
+```{r}
+
+disease_group <- "Rare genetic neurological disorder"
+
+# result from using significant networks
+rank_df_all_folds <- readRDS("../cache/LCC_CV_ranking_rare_genetic_diseases_no_LCC_recompute.RDS")
+
+combn_visiting_prob <- list()
+for(i in names(rank_df_all_folds)){
+  combn_visiting_prob[[i]] <- rank_df_all_folds[[i]] %>%
+    bind_rows() %>%
+    group_by(GeneName, trueset) %>%
+    summarise(avg_prob = mean(avg), .groups =  "drop") %>%
+    ungroup() %>%
+    arrange(-avg_prob) %>%
+    mutate(rank = 1:n())
+}
+
+
+rank_df_disease <- combn_visiting_prob[[disease_group]]
+
+variants_annotated <- left_join(variants, rank_df_disease, by = c("SYMBOL"="GeneName")) %>%
+  select(-trueset) %>%
+  rename(GlobalRank = rank) %>%
+  arrange(GlobalRank) %>%
+  mutate(LocalRank = 1:n())
+
+knitr::kable(variants_annotated)
+```
+
+We observed our algorithm picked a variant on HUWE1, which was confirmed to be the causal variant. 

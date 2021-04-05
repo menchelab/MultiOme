@@ -1,19 +1,4 @@
----
-title: "Multiscale network complementarity"
-description: |
-  The topological and functional complementarity of the compiled networks and randomisation
-author:
-  - name: Pisanu Ize Buphamalai
-    affiliation: CeMM & Max Perutz Lab Vienna
-    affiliation_url: www.cemm.at 
-date: "`r Sys.Date()`"
-output:
-  distill::distill_article:
-    toc: true
-    toc_depth: 2
-    code_folding: true 
----
-
+# Multiscale network complementarity
 
 Disease modules, the hallmark concept for disease gene localization in network medicine, have been extensively studied on the PPI network. In this study, we expanded this concept across scales by incorporating additional databases that were selected to represent the multiscale biological relationships from genotypes to phenotypes. These multiscale network construction from databases of various formats including the bipartite mapping (e.g. the gene-pathway association), the ontology-based semantic similarity measurement (e.g. the Gene Ontology annotation), and correlation-based relationship extracted from quantitative studies such as GTEx expression data. These networks are complementary on different levels.
 
@@ -36,21 +21,30 @@ source("../source/network_properties_analysis.R")
 network_details <- read_tsv("../data/network_details.tsv", col_types = 'ccccc')
 ```
 
-# Network details
+## Network details
+
+45 Network layers from six major databases were constructed as detailed below:
+
 ```{r}
 paged_table(network_details %>% select(!type))
 ```
 
 
-# Topological complementarity
+## Topological complementarity
 
 In addition to the scale comprehensiveness, these networks are also topologically complementary. A number of key network properties including node and link coverage, modularity, assortativity, and social bias, have been compared and shown below.
 
 Social bias: many networks were constructed based on curation from literatures. The social bias of a network is assessed by the Spearman’s correlation coefficient between the network degree of a gene and the number of publications mentioning the gene. The number of publications was queried using the INDRA python module (http://www.indra.bio, accessed on 12 April 2019)
 
 ```{r}
-g_prop_df %>% select(network, property, value) %>% paged_table()
+g_prop_df %>% 
+  mutate(type = ifelse(grepl("coex", network), "co-expression",network)) %>%
+  group_by(type, property) %>%
+  summarise(value = mean(value)) %>%
+  paged_table()
 ```
+
+Note that, for the co-expression layer, the values showed on the table above are averaged from all 38 tissue-specific networks.
 
 The plot below summarises the table properties.
 
@@ -98,7 +92,7 @@ plot_combine = plot$`Number of nodes` + plot$`Edge density` + plot$`Global clust
 suppressWarnings(print(plot_combine))
 ```
 
-# The Social bias of the networks
+## The Social bias of the networks
 
 
 
@@ -115,7 +109,7 @@ scatter+ bar
 
 ```
 
-#  The network similarity
+##  The network similarity
 
 
 We quantified the similarity of a given pair of networks $g_A \in G(V_A, E_A)$ and $g_B \in G(V_A, E_A)$ using the edge overlap index:
@@ -185,7 +179,7 @@ p
 
 #ggsave("../Figs/scatter_Network_complementarity_MDS_Overlap.pdf",plot = p, width = 4, height = 4)
 ```
-## Summary statistics of the network similarity
+### Summary statistics of the network similarity
 
 Overlap index:
 

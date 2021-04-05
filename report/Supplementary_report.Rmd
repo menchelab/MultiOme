@@ -1,0 +1,38 @@
+---
+title: "Supplementary Materials"
+description: |
+ Reproducible walk-through of codes and data for Buphamalai et.al.
+author:
+  - first_name: "Pisanu"
+    last_name: "Buphamalai"
+    affiliation: Max Perutz Labs | CeMM
+    affiliation_url: https://www.maxperutzlabs.ac.at/  
+  - first_name: "Tomislav"
+    last_name: "Kokotovic"
+    affiliation: Neurology, MedUni Vienna | LBI-RUD | CeMM
+  - first_name: "Vanja"
+    last_name: "Nagy"
+    affiliation: Neurology, MedUni Vienna | LBI-RUD | CeMM
+  - first_name: "Jörg"
+    last_name: "Menche"
+    affiliation: Max Perutz Labs | Mathematics, Uni Vienna | CeMM
+    orcid_id: 0000-0002-1583-6404
+date: "`r Sys.Date()`"
+output:
+  distill::distill_article:
+    toc: true
+    toc_depth: 2
+    code_folding: true 
+---
+
+```{r child = 'Network_complementarity.Rmd'}
+```
+
+```{r child = 'Co-expression_network_characterisation.Rmd'}
+```
+
+```{r child = 'OrphaNet_Rare_Disease_processing.Rmd'}
+```
+
+```{r child = 'Patient_variant_prioritization.Rmd'}
+```

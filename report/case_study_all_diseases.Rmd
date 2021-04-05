@@ -15,7 +15,7 @@ This is an example to show the microscopic level of the discovery.
 source("../functions/readdata_functions.R")
 source("../functions/process_LCC_result.R")
 
-library(igraph)
+pacman::p_load(treemap, igraph, ggraph, tidygraph)
 
 g = process_graph_data("../data/network_edgelists/")
 
@@ -33,6 +33,10 @@ processed_result_df = process_LCC_result(result_df)
 rare_genetic_diseases_genes <- process_disease_genes_data("../data/table_disease_gene_assoc_orphanet_genetic.tsv", 20,2000)
 
 individual_diseases_genes <- read_tsv("../data/orphaNet_disease_gene_association_with_roots.tsv")
+
+diseases <- rare_genetic_diseases_genes$disgene_df %>% pull(name)
+
+save(list = c("g", "network_info", "processed_result_df", "rare_genetic_diseases_genes",  "diseases"  ), file = "../shiny/preloadeddata.RData")
 ```
 
 # Rare genetic gastro- diseases
@@ -40,14 +44,9 @@ individual_diseases_genes <- read_tsv("../data/orphaNet_disease_gene_association
 ```{r}
 # limit the diseases t consider to max 500 diseases
 
-diseases <- rare_genetic_diseases_genes$disgene_df %>% dplyr::filter(N<500) %>% pull(name)
-
 
 dir.create(file.path("../Figs/","disease_modularity"), showWarnings = F)
 dir.create(file.path("../Figs/","disease_treemap" ), showWarnings = FALSE)
-
-library(ggraph)
-library(tidygraph)
 
 
 # --- define functions - fjaccard and overlap similarity
@@ -103,7 +102,7 @@ genes_set <- rare_genetic_diseases_genes$disgene_list[[disease_of_interest]]
 
 
 # load package for producing treemap
-pacman::p_load(treemap)
+
 
 # set a threshold for minimal amount of genes required to include in the plotting
 threshold = 3
@@ -159,7 +158,9 @@ disease_network_simiilarity[[disease_of_interest]] <- compute_graph_pairwise_sim
 
 # ---- disease graphs as a data frame for converting into tidygraph and ggraph objects ------
 
-disease_graph_df <- lapply(disease_graph, as_data_frame) %>% bind_rows(., .id = "network") %>% mutate(network = factor(network, levels = signif_nets))
+disease_graph_df <- lapply(disease_graph, as_data_frame) %>% 
+  bind_rows(., .id = "network") %>% 
+  mutate(network = factor(network, levels = signif_nets))
 
 
 disease_tidygraph <- as_tbl_graph(disease_graph_df) %>% 
@@ -191,6 +192,99 @@ ggsave2(sprintf("../Figs/disease_modularity/networks_%s_separate_dimmed.png", di
 }
 
 ```
+
+
+```{r}
+#visNetwork - website
+disease_of_interest <- diseases[3]
+graph_of_interest <- "HP"
+
+genes_set <- rare_genetic_diseases_genes$disgene_list[[disease_of_interest]]
+
+# significant networks
+signif_nets <- processed_result_df %>% dplyr::filter(name == disease_of_interest, LCC.signif != "none") %>% arrange(desc(LCC.zscore)) %>% pull(network)
+
+
+disease_graph <- g[[graph_of_interest]]- setdiff(V(g[[graph_of_interest]])$name, genes_set)
+
+nodes_df <- tibble(id = genes_set, label = genes_set)
+edges_df <- igraph::as_data_frame(disease_graph)
+
+  visNetwork(nodes = nodes_df, edges = edges_df, width = "100%") %>%
+      visPhysics(stabilization=F) %>%
+      visEdges(smooth=F, color="grey", width=0.3)  %>%
+      visNodes(color = list(background="white", highlight="magenta", border="black")) %>%
+      visIgraphLayout() %>%
+      visOptions(nodesIdSelection = list(enabled=T, useLabels=T,
+                                         style = 'width: 200px; height: 26px;
+                                         background: #f8f8f8;
+                                         color: black;
+                                         border:none;
+                                         outline:none;'),
+                 highlightNearest = list(enabled =TRUE, degree = 1, hover = T))%>%
+  #    visGroups(groupname = "upSIG", color = "red") %>%
+    #  visGroups(groupname = "downSIG", color = "blue") %>%
+      visExport(type = "png", name = "Network",
+                float = "left", label = "Save network (png)", background = "white", style= "")
+
+```
+
+
+```{r}
+# signif net glowing
+
+
+disease_of_interest <- diseases[2]
+
+genes_set <- rare_genetic_diseases_genes$disgene_list[[disease_of_interest]]
+
+
+signif_nets <- processed_result_df %>% 
+  dplyr::filter(name == disease_of_interest, LCC.signif != "none") %>% 
+  arrange(desc(LCC.zscore)) %>% 
+  pull(network)
+
+# degrees each gene in each network
+degree_diseasegenes <- sapply(g[signif_nets], function(x) degree(x, v = intersect(V(x)$name, genes_set)))
+
+# compute only the subgraphs of the disease genes
+
+disease_graph <- lapply(signif_nets, function(x) g[[x]]- setdiff(V(g[[x]])$name, genes_set))
+names(disease_graph) <- signif_nets
+
+
+# ---- disease graphs as a data frame for converting into tidygraph and ggraph objects ------
+
+disease_graph_df <- lapply(disease_graph, as_data_frame) %>% 
+  bind_rows(., .id = "network") %>% 
+  mutate(network = factor(network, levels = signif_nets))
+
+
+disease_tidygraph <- as_tbl_graph(disease_graph_df) %>% 
+    mutate(degree = centrality_degree(mode = 'all'))
+
+tidygraph_ggrpah <- ggraph(disease_tidygraph, layout = 'kk')
+
+p <- tidygraph_ggrpah + 
+  geom_edge_density(aes(fill = network),
+                    show.legend = FALSE) + 
+  geom_edge_fan(aes(alpha = stat(index), 
+                    col = network), 
+                  show.legend = FALSE) + 
+  geom_node_point(col = "white",
+                  alpha = 0.25,
+                   show.legend  = F, 
+                   size = 1) + 
+  facet_edges(~factor(network, levels = signif_nets)) + 
+  # black theme
+    theme_graph(fg_text_colour = 'white', 
+              background = "black",
+              text_colour = "white") 
+
+p
+```
+
+
 
 ```{r}
 disease_network_simiilarity_df <- bind_rows(disease_network_simiilarity, .id = "disease")
