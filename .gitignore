@@ -8,5 +8,8 @@ Figs/
 trials/
 cache/
 data/network_node2vec_results
+data/orphanet_onset
 report/draft
 report/test
+data/variants_list
+shiny/

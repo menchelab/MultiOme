@@ -56,26 +56,6 @@ if(!file.exists(subdir)) system(paste("mkdir", subdir))
 g = process_graph_data(graph_path)
 
 
-
-# dismat = list()
-# for(i in names(g)){
-#   # Pre compute distance matrix
-#   dismat_path = paste0("./cache/distance_matrices/dismat_",i,".RDS")
-#   
-#   # if no distance matrix file yet, compute one  
-#   if(!file.exists(dismat_path)){
-#     # pre-calculate distance matrix
-#     message(paste("Computing distance matrix for",i))
-#     dismat[[i]] = dismat_cal(g[[i]])
-#     saveRDS(dismat[[i]], dismat_path)
-#   } else{
-#     # otherwise load the precomputed matrix
-#     dismat[[i]] = readRDS(dismat_path)
-#     message(paste("Loading the pre-computed distance matrix for ", i))
-#   }
-# }
-
-
 ## read disease gene-disease relationship file
 ##############
 disgene = process_disease_genes_data(disgene_path, min_gene = min_gene, max_gene = max_gene)

@@ -1,0 +1,194 @@
+# Application to gene prioritization in rare disease patients
+
+## Number of candidate genes per patient
+```{r}
+gene_list <- read_csv("../data/patient_gene_list.csv") %>%
+  mutate(Patient = factor(Patient, level = c("N_064", "N_126", "N_020", "N_026", "N_003", "N_129", "N_007", 
+"N_040"), labels = paste0("P", 1:8)))
+
+
+gene_list %>% count(Patient, name = "number of genes")
+```
+
+Average number of genes with high confident variants detected in each patient:
+```{r}
+nrow(gene_list)/length(unique(gene_list$Patient))
+```
+
+
+These patient are diagnosed, i.e. has a confirmed causal variant. We wonder whether the causal gene can be picked up by the algorithm. The patient phenotype belong to rare genetic neurological disorder. 
+
+## Patient phenotypes (Suppl. Fig. 4c)
+```{r}
+patient_hpo_df <- read_csv("../data/patient_hpo_terms.csv", 
+                           col_names = c('Patient', "hpo_id", "hpo_label"), skip = 1) %>%
+  mutate(hpo_id = str_trim(hpo_id, side = 'both')) %>%
+  mutate(patient_ID = factor(Patient, levels = unique(Patient), label = paste0("P", 1:length(unique(Patient)))))
+
+hpo_counts <- patient_hpo_df %>%
+  count(hpo_label) %>%
+  arrange(n)  %>%
+  mutate(hpo_label = factor(hpo_label, levels = hpo_label))
+
+patient_hpo_df$hpo_label = factor(patient_hpo_df$hpo_label, levels = hpo_counts$hpo_label)
+
+p = ggplot(patient_hpo_df %>% mutate(found=T), aes(x=patient_ID, y =hpo_label, fill = found)) + 
+  #geom_tile(col = "white") + 
+  geom_point(aes(colour = found), size = 6) +
+  guides(fill = F, col=F) + 
+  theme_minimal() + xlab("Patient") + ylab("HPO label") +
+  coord_equal()
+
+#ggsave("../Figs/heatmap_patient_phenotype.pdf", p)
+
+p
+```
+
+## Patient-specific rankings
+
+The prioritization was performed using informed propagation, with seed genes specific to each patient.
+
+```{r}
+precomputed_patient_ranked_genes <- "../cache/patient_ranking_results.RDS"
+
+if(!file.exists(precomputed_patient_ranked_genes)){
+  source("../source/patient_causal_gene_prediction.R")
+}
+
+# # load precomputed results
+patient_annotated_df <- readRDS(precomputed_patient_ranked_genes) %>%
+  mutate(Patient = factor(Patient, level = c("N_064", "N_126", "N_020", "N_026", "N_003", "N_129", "N_007", 
+"N_040"), labels = paste0("P", 1:8)))
+```
+
+
+Below is the causal gene for each patient, and how well the algorithm performs for each case.
+
+```{r}
+# show the causal genes and how well the algorithm performs
+correct_rank <- patient_annotated_df %>% 
+  filter(Diagnostic=="YES", network_set == "signif") %>%
+  select(-network_set, -avg) %>% 
+  arrange(network_rank, -total_variants)
+
+correct_rank
+```
+
+
+## Patient ranking plot (Fig. 5f, Suppl. Fig. 4d)
+
+```{r patient_gene_ranking}
+# ensure it keeps the order 
+
+p_rank = list()
+for( i in unique(patient_annotated_df$network_set)){
+  correct_rank <- patient_annotated_df %>% 
+  filter(Diagnostic=="YES", network_set == i) %>%
+  select(-network_set, -avg) %>% 
+  arrange(network_rank, -total_variants)
+  
+p_rank[[i]]  <- ggplot(correct_rank) +
+  geom_segment( aes(x=Patient, xend=Patient, y=0, yend=total_variants), color="grey", size = 4) +
+  geom_point(aes(x=Patient,y=network_rank), size=5, col="orange", shape = 15) +
+  geom_text(aes(x=Patient,y=network_rank, label = network_rank), col = "white", fontface = "bold")+
+  theme_light() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.border = element_blank()
+  ) +
+  xlab("Patient") +
+  ylab("# Candidate genes")
+
+ggsave(p_rank[[i]], filename = paste0("../Figs/patient_gene_ranking_",i,".pdf"), width = 2.5, height = 3)
+}
+
+library(patchwork)
+p_rank[["signif"]] + ggtitle("Signif") +
+  p_rank[["all"]] + ggtitle("All networks") +  
+  p_rank[["ppi"]]  + ggtitle("PPI only")
+```
+
+## Patient AUC plot (Fig. 5g)
+
+```{r}
+AUC_plot <- patient_annotated_df %>%
+  mutate(pos = (network_rank-1)/(total_variants-1), 
+         label = ifelse(Diagnostic=="NO", 0,1))
+
+pacman::p_load(pROC)
+rocvals <- list()
+rocvals_df <- list()
+for(i in unique(AUC_plot$network_set)){
+  df <- AUC_plot %>% filter(network_set==i)
+  response <- df$label
+  predictor <- df$pos
+  rocvals[[i]] <- pROC::roc(response, predictor)
+  rocvals_df[[i]] <- tibble(Sensitivity =  rocvals[[i]]$sensitivities, Specificity = rocvals[[i]]$specificities)
+}
+
+
+rocvals_merged_df <- bind_rows(rocvals_df, .id = "rank_type")
+
+palettes <- c('#66c2a5','#fc8d62','#8da0cb')
+
+p <- ggplot(rocvals_merged_df, aes(x = Specificity, y = Sensitivity, col = rank_type)) + 
+  geom_line(size=2) + 
+  scale_x_reverse() + 
+  scale_color_manual(values = palettes) + guides(col = FALSE) +
+  cowplot::theme_cowplot()
+
+#ggsave(p, filename = "../Figs/patient_gene_ranking_AUC.pdf", width = 3, height = 3)
+
+p
+```
+
+The AUC for each method is as shown below.
+
+```{r}
+tibble(methods = names(rocvals), auc  = sapply(rocvals, function(x) x$auc))
+```
+
+The corresponding p-values are:
+```{r}
+pairs = combn(names(rocvals),2) %>% t %>% as.tibble()
+auc_compare_test <- apply(pairs,1, function(x) roc.test(rocvals[[x[1]]], rocvals[[x[2]]], ))
+
+pairs$pval <- sapply(auc_compare_test, function(x) x$p.value)
+
+pairs
+```
+
+
+```{r old variant plot, eval=F, include=F}
+
+# old variant plots, removed
+dir_stored <- "../Figs/Patient_gene_prioritisation/"
+dir.create(dir_stored)
+for(i in unique(variants_annotated$Patient)){
+   df <- variants_annotated %>% 
+     dplyr::filter(Patient == i) %>% 
+     mutate(true_call =  ifelse(Diagnostic == "NO", F, T))
+   p = ggplot(df, aes(x = LocalRank, y = avg_prob, col = true_call, label = GENE)) + geom_point() + ggrepel::geom_label_repel() + ggtitle(i)
+   ggsave(paste0(dir_stored, i, ".pdf"), p)
+}
+
+
+
+dir.create(dir_stored)
+for(i in unique(variants_annotated$Patient)){
+   df <- variants_annotated %>% 
+     dplyr::filter(Patient == i) %>% 
+     mutate(true_call =  ifelse(Diagnostic == "NO", F, T)) %>%
+     select(GENE, LocalRank, true_call) %>%
+     right_join(., rank_df_disease, by = c("GENE"="GeneName")) %>%
+     mutate(genelab = ifelse(!is.na(LocalRank), GENE, ""),
+            col_lab = ifelse(!is.na(true_call), true_call, "not in patient"))
+   p = ggplot(df, aes(x = GlobalRank, y = avg_prob, col = true_call, label = genelab)) + geom_point() + ggrepel::geom_label_repel() + ggtitle(i)
+   ggsave(paste0(dir_stored, "global_", i, ".pdf"), p)
+}
+
+write_csv(x = variants_annotated, file = paste0(dir_stored, "avg_prob_patients.csv"))
+```
+
+
+

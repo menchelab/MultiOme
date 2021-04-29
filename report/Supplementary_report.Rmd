@@ -1,5 +1,5 @@
 ---
-title: "Supplementary Materials"
+title: "Supplementary Codes"
 description: |
  Reproducible walk-through of codes and data for Buphamalai et.al.
 author:
@@ -25,14 +25,38 @@ output:
     code_folding: true 
 ---
 
-```{r child = 'Network_complementarity.Rmd'}
+# Introduction
+
+This supplementary report is aimed to be a reproducible walk-through guide for figures and analyses complementing the manuscript: Buphamalai et.al., *Network analysis reveals rare disease signatures across multiple levels of biological organization*, submitted to Nature Communications. PLease find the following guidelines:
+
+1. The appearance of sections in this document is at the same order as in the manuscript, and can be navigated using the Table of Content (ToC) appeared on the top left corner of this document, with subsections corresponding to exact figures/statistics 
+2. The corresponding code chunks to each figures/analyses are provided above the output, and are hidden by default. To expand each code chunk, click `Show code`.
+3. This report mainly contains visualization and post-processing of major analyses. Heavier computations were pre-computed, and corresponding `R`, `sh`, or `py` scripts required for each analysis are mentioned for each section. These files are avaiable in `./source` folder.
+4. The pre-computed results are saved in `./cache` folder and can be downloaded from: [link](deposit) 
+5. The corresponding `Rmd` files used to produce this report can be found in `./report/` folder.
+
+```{r global setup, include=FALSE}
+filter <- dplyr::filter
+select <- dplyr::select
 ```
 
-```{r child = 'Co-expression_network_characterisation.Rmd'}
+```{r child = '1_Network_complementarity.Rmd'}
 ```
 
-```{r child = 'OrphaNet_Rare_Disease_processing.Rmd'}
+```{r child = '2_Co-expression_network_characterisation.Rmd'}
 ```
 
-```{r child = 'Patient_variant_prioritization.Rmd'}
+```{r child = '3_OrphaNet_Rare_Disease_processing.Rmd'}
+```
+
+```{r child = '4_Quantifying_network_modularity.Rmd'}
+```
+
+```{r child = '5_contextualization.Rmd'}
+```
+
+```{r child = '6_Cross_validation_retrieval.Rmd'}
+```
+
+```{r child = '7_Patient_gene_prioritization.Rmd'}
 ```

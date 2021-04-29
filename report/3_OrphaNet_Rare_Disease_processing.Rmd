@@ -1,0 +1,547 @@
+# Identifying cross-scale network signatures of rare diseases
+
+The structure of Orphanet Rare Disease Ontology was queried and processed using R interface of the Ontology Lookup Service (https://lgatto.github.io/rols/index.html). A number of calculation per-computed for further analyses on this section was performed in `source/Orphanet_annotate_genes_to_ancestors.R`.  
+
+## Individual gene-disease association (Suppl. Data 4)
+
+```{r setup orphanet data}
+# load direct gene association
+orpha_gene_onset_df <- readRDS("../cache/orpha_gene_onset_df.RDS")
+
+# disease gene association with roots
+orphanet_gene_association <- read_tsv("../data/orphaNet_disease_gene_association_with_roots.tsv")
+
+# disease gene association at group level
+source("../functions/readdata_functions.R")
+gene_disease_orpha = process_disease_genes_data("../data/table_disease_gene_assoc_orphanet_genetic.tsv", 1, 2000)
+#source("../source/read_orphanet_gene_association_data.R")
+gene_disease_orpha = gene_disease_orpha$disgene_df
+
+# Modify and merge data
+orpha_gene_display_df <- orphanet_gene_association %>%
+  dplyr::filter(n_genes > 0) %>%
+  mutate(ID = as.double(str_remove(orphaID, "Orphanet:"))) 
+
+DT::datatable(orpha_gene_display_df[,c("ID", "label", "n_genes", "genes")] ,
+                extensions = 'Buttons',
+                options = list(dom = 'Blfrtip',
+                               buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                               lengthMenu = list(c(10,25,50,-1),
+                                                 c(10,25,50,"All"))))
+```
+
+## Rare disease gene association is scarced and needs to be analysed as a group (Fig. 2a)
+
+Rare diseases are scarcely annotated, and most disease terms (2686 out of 3771) are only associated with one gene. Network-based measurements for individual diseases are unfeasible and grouping of the terms for higher level association are necessary.
+
+```{r}
+# from orphanet_mapping_top_branch
+gene_per_disease = orpha_gene_onset_df %>% 
+  dplyr::filter(!is.na(gene)) %>% 
+  count(orphaID)
+
+gene_per_disease_count = gene_per_disease %>% 
+  mutate(group = cut(n, breaks = c(0:10, 100), labels = c(1:10, "> 10"))) %>% 
+  count(group)
+
+p = ggplot(gene_per_disease_count, aes(x = group, y =n)) + geom_col() +
+  ggtitle("Most orphanet diseases are immediately associated with one gene") +
+  theme_minimal() + ylab("Number of diseases") + xlab("Number of genes per disease")#+ scale_y_log10()
+
+plotly::ggplotly(p)
+```
+
+
+```{r}
+pacman::p_load(cowplot)
+#gene_per_disease_group = gene_disease_orpha %>% 
+ # mutate(group = cut(n_genes, breaks = c(seq(0,100,20), seq(200,1000, 200), Inf))) %>% count(group)
+
+#ggplot(gene_per_disease_group, aes(x = group, y =n)) + geom_col() +
+#  ggtitle("Most orphanet diseases are immediately associated with one gene") +
+#  theme_minimal() + ylab("Number of diseases") + xlab("Number of genes per disease")#+ scale_y_log10()
+
+# number shift
+gene_per_disease_group = gene_disease_orpha %>% 
+  mutate(disease = "Grouped", n = N) %>% 
+  select(disease, n)
+
+gene_per_disease = gene_per_disease %>% 
+  mutate(disease = "Individual")
+
+gene_per_disease_both = gene_per_disease %>% 
+  select(disease, n) %>%
+  bind_rows(., gene_per_disease_group) %>% 
+  dplyr::filter(n>0) %>%
+  # relevel factor
+  mutate(disease = factor(disease, levels = c("Individual","Grouped")))
+
+# add break values for plotting on log scale on x axis
+breakvals = c(0:9, seq(10,90,10), seq(100,1000,100), 2000)
+
+gene_per_disease_both_count = gene_per_disease_both %>% 
+  mutate(group = cut(n, breaks = breakvals, include.lowest = T, labels = breakvals[-1])) %>%
+  group_by(disease, group) %>% 
+  summarise(n = n()) %>% 
+  mutate(prop = n/sum(n)) %>% 
+  full_join(., tibble(group = as_factor(breakvals[-1])))
+
+
+gene_per_disease_both_count$disease[is.na(gene_per_disease_both_count$disease)] = "Grouped"
+gene_per_disease_both_count$n[is.na(gene_per_disease_both_count$n)] = 0
+# plot
+#ggplot(gene_per_disease_both_count, aes(y = prop, x = group)) + geom_col() +  theme_minimal() +facet_grid(disease ~ .)
+
+p = ggplot(gene_per_disease_both_count, aes(y = n, x = group)) + 
+  geom_col() +  
+  facet_grid(disease ~ ., scales = "free") +
+  #scale_x_discrete(guide = guide_axis(check.overlap = TRUE)) +
+  scale_x_discrete(breaks = c(1,10,100,1000))+
+  geom_vline(xintercept = which(levels(gene_per_disease_both_count$group)==20), linetype = "dashed", col = "red") + theme_cowplot() + xlab("Genes per disease term") + ylab("Number of terms")
+
+p
+#ggsave("../Figs/orphanet_individual_vs_grouped_diseases_bar.pdf", p, width = 3*1.5, height = 2*1.5)
+```
+
+
+```{r gene_per_disease_before_after_grouping, eval=FALSE, include=FALSE}
+gene_per_disease_both <-gene_per_disease_both %>% mutate(disease = factor(disease, levels = c("Orphanet individual", "OrphaNet Group")))
+
+p <- ggplot(gene_per_disease_both, aes(n)) + geom_density(fill = "grey80") +   theme_minimal() +facet_grid(disease ~ ., scales = "free") + scale_x_log10() + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + xlab("Number of genes per disease") + geom_vline(xintercept = 20, linetype = "dashed", col = "red")
+
+#ggsave("../Figs/orphanet_individual_vs_grouped_diseases.pdf", p, width = 3, height = 2)
+
+p
+```
+
+Based on the plot above, accumulating gene-disease association for descendant disease terms of 'Rare genetic disease' ( "Orphanet:98053") resulting in physiologically distinct disease groups where the majority (26 out of 28) groups are associated with sufficient amount of genes for module detection ($n=20$).
+
+## Grouping rare disease genes (Suppl. Data 5)
+
+The disease gene association can be found in `data/table_disease_gene_assoc_orphanet_genetic.tsv`. The summary of disease groups and all associated genes are shown below.
+
+```{r disease grouping}
+gene_disease_orpha_df <- gene_disease_orpha %>% select(name, N) %>% arrange(-N)
+rmarkdown::paged_table(gene_disease_orpha_df) 
+```
+
+## Consistent specificity across disease groups (Suppl. Fig. 2a)
+
+Despite the wide range of associated genes, the average number of genes per disease term remains comparable across all disease groups, ensuring similar level of disease specificity across the disease domain. 
+
+```{r}
+
+root_and_gene_df <- orpha_gene_display_df %>%
+  select(ID, genes, roots) %>%
+  separate_rows(roots, sep = ";") 
+  
+n_term_per_group <- root_and_gene_df %>%
+  distinct(ID, roots) %>%
+  count(roots, name = "n_terms")
+
+gene_disease_orpha_df$pass <- gene_disease_orpha_df$N >= 20
+
+disease_characteristics <- left_join(gene_disease_orpha_df, n_term_per_group, by = c("name"="roots")) %>%
+  mutate(genes_per_term = N/n_terms) %>%
+  pivot_longer(!c(name, pass), names_to = "property", values_to = "count") %>%
+  mutate(name = factor(name, levels = rev(gene_disease_orpha_df$name)),
+         property = factor(property, levels = c("N", "n_terms", "genes_per_term"), 
+                           labels = c("# genes", "# disease terms", "# genes/term"))) 
+
+
+
+p <- ggplot(disease_characteristics, aes(x = name, y = count, fill = pass)) + 
+  geom_col() + 
+  facet_grid(.~property, scales = "free") +
+  theme_cowplot() +
+  coord_flip() +
+  scale_fill_manual(values = c("#bdbdbd", "#1c9099")) +
+  guides(fill = FALSE)
+
+#ggsave("../Figs/barplot_disease_characteristics.pdf",p, width = 10, height = 5)
+
+p
+```
+The summary statistics for each of these properties are as follows:
+```{r}
+disease_characteristics %>% group_by(property) %>% summarise(mean = mean(count))
+```
+
+## Unique representation of the 26 disease groups (Suppl. Fig. 2b)
+
+Even though some disease groups may contain some overlap terms, 90.5% of disease pairs are distinctive (Jaccard Index < 0.1) and therefore represent unique disease definition 
+
+```{r}
+removed_roots <- gene_disease_orpha %>% filter(N<20) %>% pull(name)
+
+terms_per_root <- root_and_gene_df %>%
+  filter(!roots %in% removed_roots) %>%
+  group_by(roots) %>%
+  summarise(IDs = list(unique(ID))) %>%
+  filter(!is.na(roots)) %>%
+  pull(IDs, name = roots)
+
+genes_per_root <- gene_disease_orpha %>%
+  pull(genes_all, name = name)
+
+terms_pairwise_df <- combn(names(terms_per_root), 2) %>% t %>% as.tibble() 
+
+jaccard <- function(x1, x2){
+  length(intersect(x1, x2))/length(union(x1, x2))}
+
+overlap <- function(x1, x2){
+  length(intersect(x1, x2))/min(length(x1), length(x2))}
+
+terms_pairwise_df$jaccard_terms <- apply(terms_pairwise_df, 1, function(x) jaccard(terms_per_root[[x[1]]], terms_per_root[[x[2]]]))
+terms_pairwise_df$jaccard_genes <- apply(terms_pairwise_df, 1, function(x) jaccard(genes_per_root[[x[1]]], genes_per_root[[x[2]]]))
+terms_pairwise_df$overlap_terms <- apply(terms_pairwise_df, 1, function(x) overlap(terms_per_root[[x[1]]], terms_per_root[[x[2]]]))
+terms_pairwise_df$overlap_genes <- apply(terms_pairwise_df, 1, function(x) overlap(genes_per_root[[x[1]]], genes_per_root[[x[2]]]))
+
+terms_pairwise_df <- terms_pairwise_df %>%
+  mutate(label = ifelse(jaccard_terms>0.2, str_remove_all(paste(V1, V2,sep = " & "), "Rare |genetic | disorder| diseases| disease| during embryogenesis|inborn errors of |and obstetrical"),""))
+
+p = ggplot(terms_pairwise_df, aes(x=jaccard_terms, y=jaccard_genes, label = label)) + 
+  geom_point(aes(col = jaccard_terms), alpha = 0.7) +
+  scale_color_viridis_c() +
+  theme_cowplot() +
+  xlab("Jaccard (disease terms)") +
+  ylab("Jaccard (disease genes)") +
+  ggrepel::geom_text_repel() + guides(col = F)
+
+#ggsave("../Figs/scatter_disease_similarity_jaccard.pdf", p, width = 5, height = 5)
+
+p
+```
+
+
+```{r syndromicity assessment, eval=FALSE, include=F}
+## Syndromicity measurement
+#Disease groups are syndromic if they share terms overlapping several other disease groups
+
+test = list()
+for(case in unique(terms_pairwise_df$V1)){
+  
+vals_df <- terms_pairwise_df %>%
+  mutate(group = ifelse(V1 == case|V2==case, "case","other")) %>%
+  pull(overlap_genes, name = group)
+
+test[[case]] <- wilcox.test(x=vals_df[names(vals_df)=="case"], y=vals_df[names(vals_df)=="other"], alternative = "greater")
+}
+
+test_pval <- sapply(test, function(x) x$p.value)
+
+test_pval[test_pval<0.05]
+```
+
+## Omitted disease groups
+
+Omitting disease groups with fewer than 20 associated genes, the number of terms (out of 3771) and genes excluded from further analyses include:
+```{r}
+# table for removed terms
+removed_disease_terms <- orphanet_gene_association %>%
+  mutate(n_roots = str_count(roots, ";")+1,
+         removed_roots = grepl(removed_roots[1], roots) + grepl(removed_roots[2], roots),
+         remained_roots = n_roots - removed_roots) %>%
+  filter(remained_roots == 0) %>%
+  select(orphaID, label, genes, roots)
+
+removed_genes <- sapply(removed_disease_terms$genes, function(x) str_split(x, ";")) %>% unlist %>% unique()
+
+knitr::kable(removed_disease_terms)
+```
+
+
+There are `r nrow(removed_disease_terms)` disease terms whose associated genes are not associated with any other disease groups, and hence these `r length(removed_genes)` genes are omitted.
+
+## Tree map for ontology representation of rare diseases (Fig. 2b)
+
+```{r}
+# download the association
+library(RColorBrewer)
+
+orphanet_gene_association_unique_root <- orphanet_gene_association %>%
+  separate_rows(., roots, sep = ";", convert = T) %>% dplyr::filter(!is.na(roots)) %>% 
+  mutate(roots = as.factor(roots))
+
+## take a function to allow modifying alpha values
+# Add an alpha value to a colour
+add.alpha <- function(col=NULL, alpha=1){
+  if(missing(col))
+    stop("Please provide a vector of colours.")
+  apply(sapply(col, col2rgb)/255, 2, 
+                     function(x) 
+                       rgb(x[1], x[2], x[3], alpha=alpha))  
+}
+
+# define colours for all disease groups
+mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nrow(gene_disease_orpha))
+
+# add id 1-28
+gene_disease_orpha$id = 1:nrow(gene_disease_orpha)
+
+# add colour with corresponding alpha values to each disease group
+gene_disease_orpha_mod <- gene_disease_orpha %>% 
+  rowwise() %>%
+  mutate(col =mycolors[id])
+  #mutate(col = add.alpha(mycolors[id], N/max(gene_disease_orpha$N)))
+
+gene_disease_orpha_mod$root = "Orphanet"
+
+# load voronoi treemap package
+if(!"voronoiTreemap" %in% rownames(installed.packages())){
+  pacman::p_load_gh("https://github.com/uRosConf/voronoiTreemap")
+} else{
+  library(voronoiTreemap)
+}
+
+
+gene_disease_orpha_mod$plotlab = str_remove_all( gene_disease_orpha_mod$name, "Rare |genetic | disease| syndrome| disorder")
+onto_json <- vt_export_json(vt_input_from_df(gene_disease_orpha_mod, hierachyVar0 = "root", hierachyVar1 = "name", hierachyVar2 = "name", colorVar = "col", weightVar = "N", labelVar = "plotlab"))
+
+vt_d3(onto_json)
+```
+
+## Disease-network landscape (Fig. 2c,d)
+
+The node2vec embedding was performed to allow visualization of large networks in small space.
+
+```{r create coordinates, eval=FALSE}
+# only run this chuck to recompute all the coordinate values
+
+#embed_result_dir = "./embedded_results/"
+embed_result_dir = "../data/network_node2vec_results//"  #only the new coexpression networks
+embed_files = list.files(embed_result_dir, recursive = T)
+
+# dim reduction
+library(uwot)
+library(Rtsne)
+
+for(i in embed_files){
+  print(i)
+  df = read_delim(paste0(embed_result_dir, i), delim = " ", skip = 1, col_names = F) 
+  df = df[apply(df, 1, function(x) !any(is.na(x))),]
+  df = column_to_rownames(df, var = "X1")
+  
+  print("UMAP")
+  umap_results = uwot::umap(df, n_neighbors = 15)
+  print("PCA")
+  pca_results = pcaMethods::pca(df)
+  print("tsne")
+  tsne_results = Rtsne::Rtsne(X = df, dims=2)
+  
+  umap_results_df = tibble(X = umap_results[,1], Y = umap_results[,2])
+  tsne_results_df = tibble(X = tsne_results$Y[,1], Y = tsne_results$Y[,2])
+  pca_results_df = tibble(X = pca_results@scores[,1], Y = pca_results@scores[,2])
+  
+  umap_results_df$name = tsne_results_df$name = pca_results_df$name = rownames(df)
+  
+  write_tsv(umap_results_df, paste("../cache/embedded_results_2D/", i, "umap.tsv", sep = "_"), col_names = T)
+  write_tsv(tsne_results_df, paste("../cache/embedded_results_2D/", i, "tsne.tsv", sep = "_"), col_names = T)
+  write_tsv(pca_results_df, paste("../cache/embedded_results_2D/", i, "pca.tsv", sep = "_"), col_names = T)
+}
+```
+
+```{r plot embeded files, eval=FALSE}
+for(d in alldiseases){
+  disease = orpha$disgene_list[[d]]
+  
+  for(n in embed_files){
+    network_name = str_replace(n, "coex/", "")
+    
+    # load the node2vec embedded results
+    tsne_results_df = read_tsv(paste("../cache//embedded_results_2D/", network_name, "tsne.tsv", sep = "_"), col_types = 'ddc') %>% 
+      mutate(indisease = name %in% disease)
+
+    n <- str_replace(n, "/", "_") # replace / by _ for labelling
+    
+    # create directory to store results
+    dir.create(file.path(paste0(embedding_fig_dir, "/by_disease"),  d), showWarnings = FALSE)
+    dir.create(file.path(paste0(embedding_fig_dir, "/by_network"),  n), showWarnings = FALSE)
+ 
+    
+    
+    p <- ggplot(tsne_results_df)  + 
+      stat_density_2d(aes(X,Y,  fill = stat(level)), geom = "polygon") + 
+      theme(panel.background = element_rect(fill = '#0f2030'),
+            axis.line=element_blank(),axis.text.x=element_blank(),
+            axis.text.y=element_blank(),axis.ticks=element_blank(),
+            axis.title.x=element_blank(),
+            axis.title.y=element_blank(),legend.position="none",
+            panel.border=element_blank(),panel.grid.major=element_blank(),
+            panel.grid.minor=element_blank(),plot.background=element_blank())+ 
+      geom_point(aes(X,Y, alpha = indisease), col = "white", size = 1) +
+      scale_alpha_discrete(range = c(0, 0.5)) + guides(fill = FALSE, alpha = FALSE, col = FALSE)+
+      ggtitle(paste0(d,": ",n))
+    
+    ggsave(filename = sprintf("%s/%s/%s/%s.pdf", embedding_fig_dir, "by_disease", d, n), plot = p, device = "pdf", width = 5, height = 5)
+    ggsave(filename = sprintf("%s/%s/%s/%s.pdf", embedding_fig_dir, "by_network", n, d), plot = p, device = "pdf", width = 5, height = 5)
+           
+  }
+}
+
+```
+
+```{r}
+# only run this chunk to replot
+source("../functions/readdata_functions.R")
+
+# folder to add figures
+embedding_fig_dir = "../Figs/embedding/"
+
+orpha = process_disease_genes_data("../data/table_disease_gene_assoc_orphanet_genetic.tsv", 20, 2000)
+
+alldiseases = names(orpha$disgene_list)
+
+tsne_results_df <- read_tsv("../cache//embedded_results_2D/_HP_tsne.tsv", col_types = 'ddc') 
+
+selected_diseases <- c(
+"Rare genetic immune disease", 
+"Rare genetic cardiac disease", 
+"Rare genetic renal disease",
+"Rare genetic bone disease", 
+"Rare genetic hematologic disease", 
+"Rare genetic neurological disorder"
+)
+```
+
+
+```{r, eval=FALSE, include=FALSE}
+# custom plot
+
+for(d in alldiseases){
+  disease = orpha$disgene_list[[d]]
+  
+  for(n in c("HP")){
+    network_name = str_replace(n, "coex/", "")
+    
+    # load the node2vec embedded results
+    tsne_results_df = read_tsv(paste("../cache//embedded_results_2D/", network_name, "tsne.tsv", sep = "_"), col_types = 'ddc') %>% 
+      mutate(indisease = name %in% disease)
+
+    n <- str_replace(n, "/", "_") # replace / by _ for labelling
+    
+    # create directory to store results
+    dir.create(file.path(paste0(embedding_fig_dir, "/by_disease"),  d), showWarnings = FALSE)
+    dir.create(file.path(paste0(embedding_fig_dir, "/by_network"),  n), showWarnings = FALSE)
+ 
+    
+    
+    p <- ggplot(tsne_results_df)  + 
+      stat_density_2d(aes(X,Y,  fill = stat(level)), geom = "polygon") + 
+      theme(panel.background = element_rect(fill = '#0f2030'),
+            axis.line=element_blank(),axis.text.x=element_blank(),
+            axis.text.y=element_blank(),axis.ticks=element_blank(),
+            axis.title.x=element_blank(),
+            axis.title.y=element_blank(),legend.position="none",
+            panel.border=element_blank(),panel.grid.major=element_blank(),
+            panel.grid.minor=element_blank(),plot.background=element_blank())+ 
+      geom_point(aes(X,Y, alpha = indisease), col = "white", size = 1) +
+      scale_alpha_discrete(range = c(0, 0.5)) + guides(fill = FALSE, alpha = FALSE, col = FALSE)+
+      ggtitle(paste0(d,": ",n))
+    
+   # ggsave(filename = sprintf("%s/%s/%s/%s.pdf", embedding_fig_dir, "by_disease", d, n), plot = p, device = "pdf", width = 5, height = 5)
+    ggsave(filename = sprintf("%s/%s/%s/custom_%s.pdf", embedding_fig_dir, "by_network", n, d), plot = p, device = "pdf", width = 3, height = 3)
+           
+  }
+}
+
+
+
+#### 
+# Rare genetic cardiac disease, all network, custom 3x3
+
+for(d in "Rare genetic cardiac disease"){
+  disease = orpha$disgene_list[[d]]
+  
+  for(n in c("coex/ATC", "coex/HRV","GOBP", "HP", "MP", "ppi")){
+    network_name = str_replace(n, "coex/", "")
+    
+    # load the node2vec embedded results
+    tsne_results_df = read_tsv(paste("../cache//embedded_results_2D/", network_name, "tsne.tsv", sep = "_"), col_types = 'ddc') %>% 
+      mutate(indisease = name %in% disease)
+
+    n <- str_replace(n, "/", "_") # replace / by _ for labelling
+    
+    # create directory to store results
+    dir.create(file.path(paste0(embedding_fig_dir, "/by_disease"),  d), showWarnings = FALSE)
+    dir.create(file.path(paste0(embedding_fig_dir, "/by_network"),  n), showWarnings = FALSE)
+ 
+    
+    
+    p <- ggplot(tsne_results_df)  + 
+      stat_density_2d(aes(X,Y,  fill = stat(level)), geom = "polygon") + 
+      theme(panel.background = element_rect(fill = '#0f2030'),
+            axis.line=element_blank(),axis.text.x=element_blank(),
+            axis.text.y=element_blank(),axis.ticks=element_blank(),
+            axis.title.x=element_blank(),
+            axis.title.y=element_blank(),legend.position="none",
+            panel.border=element_blank(),panel.grid.major=element_blank(),
+            panel.grid.minor=element_blank(),plot.background=element_blank())+ 
+      geom_point(aes(X,Y, alpha = indisease), col = "white", size = 1.5) +
+      scale_alpha_discrete(range = c(0, 0.5)) + guides(fill = FALSE, alpha = FALSE, col = FALSE)+
+      ggtitle(paste0(d,": ",n))
+    
+    ggsave(filename = sprintf("%s/%s/%s/custom_%s.pdf", embedding_fig_dir, "by_disease", d, n), plot = p, device = "pdf", width = 3, height = 3)
+    #ggsave(filename = sprintf("%s/%s/%s/custom_%s.pdf", embedding_fig_dir, "by_network", n, d), plot = p, device = "pdf", width = 3, height = 3)
+           
+  }
+}
+
+```
+
+```{r}
+
+tsne_results_df <- read_tsv("../cache//embedded_results_2D/_HP_tsne.tsv", col_types = 'ddc') 
+
+selected_diseases <- c(
+"Rare genetic immune disease", 
+"Rare genetic cardiac disease", 
+"Rare genetic renal disease",
+"Rare genetic bone disease", 
+"Rare genetic hematologic disease", 
+"Rare genetic neurological disorder"
+)
+
+
+embed_files_selected <- "HP"
+embedding_fig_dir = "../Figs/embedding/"
+
+embedplot <- list()
+
+for(d in selected_diseases){
+  disease = orpha$disgene_list[[d]]
+  
+  # create directory to store results
+  dir.create(file.path(embedding_fig_dir, d), showWarnings = FALSE)
+ 
+  embedplot[[d]] <- list()
+  
+  for(n in embed_files_selected){
+    network_name = str_replace(n, "coex/", "")
+    
+    # load the node2vec embedded results
+    tsne_results_df = read_tsv(paste("../cache//embedded_results_2D/", network_name, "tsne.tsv", sep = "_"), col_types = 'ddc') %>% 
+      mutate(indisease = name %in% disease)
+
+    n <- str_replace(n, "/", "_") # replace / by _ for labelling
+    
+    embedplot[[d]][[n]] <- ggplot(tsne_results_df)  + 
+      stat_density_2d(aes(X,Y,  fill = stat(level)), geom = "polygon") + 
+      theme(panel.background = element_rect(fill = '#0f2030'),
+            axis.line=element_blank(),axis.text.x=element_blank(),
+            axis.text.y=element_blank(),axis.ticks=element_blank(),
+            axis.title.x=element_blank(),
+            axis.title.y=element_blank(),legend.position="none",
+            panel.border=element_blank(),panel.grid.major=element_blank(),
+            panel.grid.minor=element_blank(),plot.background=element_blank())+ 
+      geom_point(aes(X,Y, alpha = indisease), col = "white", size = 1) +
+      scale_alpha_discrete(range = c(0, 0.5)) + guides(fill = FALSE, alpha = FALSE, col = FALSE)+
+      ggtitle(paste0(d,": ",n))
+           
+  }
+}
+
+embedplot <- lapply(embedplot, function(x) x[[1]])
+(embedplot[[1]] + embedplot[[2]] + embedplot[[3]])/(embedplot[[4]] + embedplot[[5]] + embedplot[[6]])
+```
+

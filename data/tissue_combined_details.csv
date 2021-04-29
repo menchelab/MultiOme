@@ -1,0 +1,50 @@
+﻿GTEx original tissue name,Merged tissue name,Abbreviation,Total samples
+subcutaneous adipose tissue,Adipose subcutaneous,ADS,757
+greater omentum,Adipose visceral,ADV,452
+adrenal gland,Adrenal gland,ARG,314
+aorta,Artery aorta,ATA,489
+coronary artery,Artery coronary,ATC,274
+tibial artery,Artery tibial,ATT,715
+nucleus accumbens,Brain basal ganglia,BRB,708
+caudate nucleus,,,
+putamen,,,
+cerebellum,Brain cerebellum,BRC,503
+cerebellar hemisphere,,,
+hypothalamus,Brain other,BRO,1528
+Brodmann (1909) area 9,,,
+Brodmann (1909) area 24,,,
+C1 segment of cervical spinal cord,,,
+amygdala,,,
+substantia nigra,,,
+cerebral cortex,,,
+hippocampus proper,,,
+breast,Breast,BST,427
+sigmoid colon,Colon sigmoid,CLS,338
+transverse colon,Colon transverse,CLT,406
+esophagus mucosa,Esophagus mucosa,EMC,652
+esophagus muscularis mucosa,Esophagus muscularis,EMS,567
+transformed skin fibroblast,Fibroblast cell line,FIB,609
+esophagogastric junction,Gastroesophageal junction,GEJ,339
+atrium auricular region,Heart atrial appendage,HRA,422
+heart left ventricle,Heart left ventricle,HRV,537
+small intestine Peyer's patch,Intestine terminal ileum,ITI,204
+cortex of kidney,Kidney cortex,KDN,70
+EBV-transformed lymphocyte,Lymphoblastoid cell line,LCL,260
+lung,Lung,LNG,721
+liver,Liver,LVR,276
+minor salivary gland,Minor salivary gland,MSG,141
+ovary,Ovary,OVR,213
+pituitary gland,Pituitary,PIT,246
+pancreas,Pancreas,PNC,386
+prostate gland,Prostate,PRS,238
+suprapubic skin,Skin,SKN,1302
+lower leg skin,,,
+skeletal muscle tissue,Skeletal muscle,SMU,926
+spleen,Spleen,SPL,233
+stomach,Stomach,STM,403
+thyroid gland,Thyroid,THY,713
+tibial nerve,Tibial nerve,TNV,657
+testis,Testis,TST,395
+uterus,Uterus,UTR,180
+vagina,Vagina,VGN,184
+blood,Whole blood,WBL,891

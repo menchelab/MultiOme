@@ -1,0 +1,39 @@
+﻿Patient,HPO term code,HPO term 
+N_003,HP:0001252,Hypotonia
+N_003,HP:0001249,Intellectual disability
+N_003,HP:0001250,Seizure 
+N_003,HP:0012758,Neurodevelopmental delay
+N_007,HP:0012758,Neurodevelopmental delay
+N_007,HP:0001251,ataxia
+N_007,HP:0011904,Persistance of hemoglobin F
+N_007,HP:0000252,microcephaly
+N_007,HP:0001252,Hypotonia
+N_007,HP:0001249,Intellectual disability
+N_020,HP:0001510,Growth delay 
+N_020,HP:0001999,Dysmorphic facies
+N_020,HP:0000348,High forehead
+N_020,HP:0001276,Hypertonia
+N_020,HP:0001655,Patent foramen ovale
+N_026,HP:0001510,Growth delay 
+N_026,HP:0000252,microcephaly
+N_026,HP:0010864,"Intellectual disability, severe"
+N_026,HP:0001250,Seizure 
+N_040,HP:0012758,Neurodevelopmental delay
+N_040,HP:0001252,Hypotonia
+N_040,HP:0012433,Abnormal social behavior
+N_040,HP:0002353,EEG abnormality
+N_064,HP:0007021,Pain insensitivity
+N_064,HP:0002719,Recurrent infections
+N_064,HP:0000729,Autistic behavior
+N_064,HP:0003474,Sensory impairment
+N_064,HP:0010829,Impaired temperature sensation
+N_064,HP:0012804,Corneal ulceration
+N_126,HP:0001252,Hypotonia
+N_126,HP:0012758,Neurodevelopmental delay
+N_126, HP:0002438,Cerebellar malformation
+N_129,HP:0001252,Hypotonia
+N_129,HP:0012758,Neurodevelopmental delay
+N_129, HP:0002438,Cerebellar malformation
+N_129,HP:0001159,Syndactyly 
+N_129,HP:0000252,microcephaly
+N_129,HP:0000028,Cryptorchism 

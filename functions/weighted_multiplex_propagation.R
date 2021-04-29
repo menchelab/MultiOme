@@ -39,27 +39,17 @@ supraadjacency_compute = function(weighted_layer_df, el = NULL){
   return(Stest)
 }
 
-weighted_multiplex_propagation = function(seedset, trueset, weighted_layer_df, network_dirs = NULL, el = NULL, gene_allnet = NULL, Stest = NULL){
+weighted_multiplex_propagation = function(seedset, seedweight = NULL, trueset, weighted_layer_df, network_dirs = NULL, el = NULL, gene_allnet = NULL, Stest = NULL, remove_seeds = TRUE){
   ###########
-  # Collecting edge lists from significant networks
-  ##########
+  #
+
+    ##########
   require(igraph)
   require(tidyverse)
-  
-  #setwd("~/Documents/projects/Multiome/")
-  
-  # source required functions
-#  source("../functions/process_edgelist.R")
-#  source("../functions/LCC_functions.R")
-#  source("../functions/readdata_functions.R")
-#  source("../functions/fn_source.R")
-#  source("../functions/RWR_get_allnodes.R")
-#  source("../functions/RWR_transitional_matrix.R")
 
   
   if(is.null(network_dirs)){
-    network_dirs = c(list.files("./networks/network_edgelists/",full.names = T)#,
-                     #list.files("./networks/gtex_coexpresssion/edgelists/el_coex_by_mergedgroup_specific_two_tissues//",full.names = T)
+    network_dirs = c(list.files("./networks/network_edgelists/",full.names = T)
     )
   }
   
@@ -88,15 +78,27 @@ weighted_multiplex_propagation = function(seedset, trueset, weighted_layer_df, n
   #############
   
   print("Initialising the propagation")
-  # seed position
-  seed = gene_allnet %in% seedset
-  #seed = seed[!is.na(seed)]
   
+  # create initial visiting probability: from seed
   p_0 = rep(0, length(gene_allnet))
-  p_0[seed] = 1
+  names(p_0) = gene_allnet
+  
+  # position of seed
+  seed <- gene_allnet %in% seedset
+  
+  if(is.null(seedweight)){
+    p_0[seedset] = 1
+  } else{
+    p_0[seedset] = seedweight
+  }
+  
+  #detach names for memory efficiency
+  names(p_0) = NULL
+  
   p_0 = rep(p_0, NLayer)
   p_0 = p_0/sum(p_0)
   
+    
   pos_nonseed = seq_along(gene_allnet)[!seed]
   
   print("Performing the network-based propagation")
@@ -126,7 +128,12 @@ weighted_multiplex_propagation = function(seedset, trueset, weighted_layer_df, n
     
     
     # remove seed from the result list
-    result_df_noseed = result_df %>% dplyr::filter(!seed)
+    if(remove_seeds){
+      result_df_noseed = result_df %>% dplyr::filter(!seed)
+    } else{
+      result_df_noseed = result_df
+    }
+   
     
     # rank results
     
@@ -159,7 +166,11 @@ weighted_multiplex_propagation = function(seedset, trueset, weighted_layer_df, n
     
   } else{
    # if there is only one layer, there is no summary statistics
-    result_df = result_df %>% dplyr::filter(!seed) 
+    
+    if(remove_seeds){
+      result_df = result_df %>% dplyr::filter(!seed)  
+      } 
+    
     result_df$rank = rank(-result_df[,1])
     rank_df = result_df
   }

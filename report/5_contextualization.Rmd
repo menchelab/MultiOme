@@ -1,0 +1,131 @@
+# Using differential modularity to contextualize rare disease gene clusters
+
+A case study of microscopic analysis using our multiple networks framework. We explore the differential modularity of gastroenterological diseases as an example.
+
+
+```{r computing specific info}
+
+# load cached networks and diseases and LCC results
+source("../source/cache_all_networks_and_disease_genes.R")
+
+pacman::p_load(treemap, igraph, tidygraph, ggraph)
+
+disease_of_interest <- "Rare genetic gastroenterological disease" 
+
+
+# unique disease set under the term
+individual_gene_set <- individual_diseases_genes %>% dplyr::filter(grepl(disease_of_interest, roots))
+
+# all genes associated
+genes_set <- rare_genetic_diseases_genes$disgene_list[[disease_of_interest]]
+
+# list of all significant networks 
+signif_nets <- processed_result_df %>% dplyr::filter(name == disease_of_interest, LCC.signif != "none") %>% arrange(desc(LCC.zscore)) %>% pull(network)
+
+# degrees each gene in each network
+degree_diseasegenes <- sapply(g[signif_nets], function(x) degree(x, v = intersect(V(x)$name, genes_set)))
+
+
+# igraph object of significant networks for the disease group
+disease_graph <- lapply(signif_nets, function(x) g[[x]]- setdiff(V(g[[x]])$name, genes_set))
+names(disease_graph) <- signif_nets
+
+```
+
+## Individual disease gene association 
+
+There are `r `nrow(individual_gene_set)` individual disease terms under `r disease_of_interest`, involving `r length(genes_set)` genes.
+
+```{r}
+# print the paged table
+individual_gene_set %>% 
+  select(label, genes, n_genes) %>% 
+  arrange(-n_genes) %>%
+  rmarkdown::paged_table()
+```
+
+## Treemap association (Fig. 4)
+
+The tree map for descendants of `r disease_of_interest` are as follows (limited to terms with at least two associated genes).
+```{r treemap}
+
+# set a threshold for minimal amount of genes required to include in the plotting
+threshold = 2
+
+individual_gene_set_wrap <- individual_gene_set %>% dplyr::filter(n_genes >= threshold) %>% select(label, n_genes)
+
+n_removed <- sum(individual_gene_set$n_genes<=threshold)
+#individual_gene_set_wrap <- rbind(individual_gene_set_wrap, data.frame(label = sprintf("Other (%i diseases with one or two associated genes)", n_removed), n_genes = n_removed))
+
+
+# Create data
+{group <- ifelse(individual_gene_set_wrap$n_genes > threshold+2, 
+                individual_gene_set_wrap$label, str_trunc(individual_gene_set_wrap$label, 50, side = "right"))
+
+value <- individual_gene_set_wrap$n_genes
+data <- data.frame(group,value)
+ 
+
+treemap(data,
+        palette = "Set3",   
+        title = disease_of_interest,
+            index="group",
+            vSize="value",
+            type="index"
+            )
+}
+
+# treemap - uncomment to plot
+#pdf("../Figs/treemap_gastroenterological.pdf", width = 5, height = 4)
+```
+
+
+The module significance computation shows the following networks being significant:
+
+```{r}
+processed_result_df %>% 
+  dplyr::filter(name == disease_of_interest, LCC.signif != "none") %>% 
+  arrange(desc(LCC.zscore)) %>%
+  select(subtype, main_type, N_in_graph, LCC.size, LCC.mean, LCC.sd, LCC.zscore, correctedPval) %>%
+  knitr::kable()
+```
+
+## Differential modularity (Fig. 4)
+
+The network differential modularity can be visualised as follows:
+
+```{r}
+    # convert the igraph object into df for ggraph visualisation
+disease_graph_df <- lapply(disease_graph, as_data_frame) %>% 
+  bind_rows(., .id = "network") %>% 
+  mutate(network = factor(network, levels = signif_nets))
+    
+    
+disease_tidygraph <- as_tbl_graph(disease_graph_df) %>% 
+  mutate(degree = centrality_degree(mode = 'all'))
+    
+tidygraph_ggrpah <- ggraph(disease_tidygraph, layout = 'kk')
+
+ p <- tidygraph_ggrpah + 
+          geom_edge_density(aes(fill = network),
+                            show.legend = FALSE) + 
+          geom_edge_fan(aes(alpha = stat(index), 
+                            col = network), 
+                          show.legend = FALSE) + 
+          geom_node_point(col = "white",
+                          alpha = 0.25,
+                           show.legend  = F, 
+                           size = 1) + 
+          facet_edges(~factor(network, levels = signif_nets)) + 
+          # black theme
+            theme_graph(fg_text_colour = 'white', 
+                      background = "black",
+                      text_colour = "white") 
+ 
+# uncomment when need to replot and save
+#ggsave2(sprintf("../Figs/networks_%s.pdf", disease_of_interest), plot = p, width = 10, height = 6)
+#ggsave2(sprintf("../Figs/networks_%s_separate_dimmed.png", disease_of_interest), plot = p, width = 10, height = 6) 
+
+p
+```
+

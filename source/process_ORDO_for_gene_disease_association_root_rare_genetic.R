@@ -95,27 +95,6 @@ gene_disease_orpha = gene_disease_orpha %>% rowwise() %>% mutate(all_genes = pas
 
 write_tsv(gene_disease_orpha, "../data/table_disease_gene_assoc_orphanet.tsv")
 
-###############
-# main:get disease descendant_information
-###############
-# orphaID_df<- read_csv("../data/orphanumbers_to_name.csv", col_names = c("orphaID", "orphaName"))
-# orphaID_df$orphaID <- paste0("Orphanet:",orphaID_df$orphaID)
-# 
-# combinedDiseaseGeneList_df <- lapply(combinedDiseaseGeneList, function(x) paste(unique(x), collapse  = ";"))
-# combinedDiseaseGeneList_df <- melt(combinedDiseaseGeneList_df)
-# colnames(combinedDiseaseGeneList_df) = c("Gene", "orphaID")
-# 
-# combinedDiseaseGeneList_df <- inner_join(combinedDiseaseGeneList_df, orphaID_df, by = "orphaID")
-# 
-# # retrieve descendant
-# descendant_disease_orpha_genetic = retrieve_all_gene_association(root_term = "98053", return_genelist = F)
-# descendant_disease_orpha_genetic_id <- lapply(descendant_disease_orpha_genetic, termId)
-# 
-# descendant_disease_orpha_genetic_df <- melt(descendant_disease_orpha_genetic_id); colnames(descendant_disease_orpha_genetic_df) <- c("descendant", "ancestor")
-# 
-# # merge the data
-# orphaGeneDisease_with_ancestor <- left_join(orphaGeneDisease, descendant_disease_orpha_genetic_df, by = c("orphaID"="descendant"))
-
 
 
 

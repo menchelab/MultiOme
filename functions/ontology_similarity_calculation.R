@@ -1,11 +1,14 @@
+# Compute the semantic similarity among disease genes
+
+
 # set up and load packages
 ##############
-source("~/Documents/projects/Multiome/functions/ontology_similarity_functions.R")
-source("~/Documents/projects/Multiome/functions/readdata_functions.R")
+source("../functions/ontology_similarity_functions.R")
+source("../functions/readdata_functions.R")
 
 ## read disease gene-disease relationship file
 ##############
-disgene = process_disease_genes_data("~/Documents/projects/Multiome/Disease_gene_assoc/Orphanet/output/table_disease_gene_assoc_orphanet.tsv")
+disgene = process_disease_genes_data("../data/table_disease_gene_assoc_orphanet.tsv")
 disgene_pass_df = disgene$disgene_df
 disgene_list = disgene$disgene_list
 
