@@ -11,6 +11,7 @@ gene_list %>% count(Patient, name = "number of genes")
 ```
 
 Average number of genes with high confident variants detected in each patient:
+
 ```{r}
 nrow(gene_list)/length(unique(gene_list$Patient))
 ```
@@ -149,6 +150,7 @@ tibble(methods = names(rocvals), auc  = sapply(rocvals, function(x) x$auc))
 ```
 
 The corresponding p-values are:
+
 ```{r}
 pairs = combn(names(rocvals),2) %>% t %>% as.tibble()
 auc_compare_test <- apply(pairs,1, function(x) roc.test(rocvals[[x[1]]], rocvals[[x[2]]], ))

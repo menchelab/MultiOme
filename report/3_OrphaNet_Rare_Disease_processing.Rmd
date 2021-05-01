@@ -162,7 +162,9 @@ p <- ggplot(disease_characteristics, aes(x = name, y = count, fill = pass)) +
 
 p
 ```
+
 The summary statistics for each of these properties are as follows:
+
 ```{r}
 disease_characteristics %>% group_by(property) %>% summarise(mean = mean(count))
 ```
@@ -236,6 +238,7 @@ test_pval[test_pval<0.05]
 ## Omitted disease groups
 
 Omitting disease groups with fewer than 20 associated genes, the number of terms (out of 3771) and genes excluded from further analyses include:
+
 ```{r}
 # table for removed terms
 removed_disease_terms <- orphanet_gene_association %>%

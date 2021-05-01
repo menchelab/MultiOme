@@ -47,6 +47,7 @@ individual_gene_set %>%
 ## Treemap association (Fig. 4)
 
 The tree map for descendants of `r disease_of_interest` are as follows (limited to terms with at least two associated genes).
+
 ```{r treemap}
 
 # set a threshold for minimal amount of genes required to include in the plotting

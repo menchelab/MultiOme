@@ -6,7 +6,7 @@ The computation was performed on bash script `./source/compute_localisation_anal
 ```{r}
 # library and configurations
 
-pacman::p_load(tidyverse, ggrepel, knitr)
+pacman::p_load(tidyverse, ggrepel, knitr, cowplot)
 pacman::p_load_gh("nightingalehealth/ggforestplot")
 
 
@@ -63,7 +63,7 @@ LCC_heatmap_plot = function(result_folder, heatmap_file){
 ## Heatmap for disease-network relevance (Fig. 3)
 
 
-```{r}
+```{r, out.width="100%"}
 rare_genetic_result_folder = "../cache/output/Orphageneset_rare/"
 rare_genetic_heatmap_file = "../Figs/heatmap_network_disease_association_orphanets_genetic_rare_diseases.pdf"
 
@@ -80,13 +80,24 @@ knitr::include_graphics(rare_genetic_heatmap_file)
 # number of significant diseases
 library(scales)
 
-result_df = readRDS(paste0("../cache/output/Orphageneset_rare/", "LCC_and_distance_calculation_results.RDS")) %>% process_LCC_result(.) %>% mutate(LCC.signif = factor(LCC.signif, levels = rev(levels(LCC.signif))))
+result_df = readRDS(paste0("../cache/output/Orphageneset_rare/", "LCC_and_distance_calculation_results.RDS")) %>% 
+  process_LCC_result(.) %>% 
+  mutate(LCC.signif = factor(LCC.signif, levels = rev(levels(LCC.signif))))
 
-ntissue_per_disease = result_df %>% dplyr::filter(LCC.signif!="none") %>% count(name, LCC.signif) #%>% mutate(name = factor(name, levels = levels_name))
+ntissue_per_disease = result_df %>% 
+  dplyr::filter(LCC.signif!="none") %>% 
+  count(name, LCC.signif) #%>% mutate(name = factor(name, levels = levels_name))
 
-p = ggplot(ntissue_per_disease, aes(x = name, y = n, fill = LCC.signif)) + geom_bar(stat = "identity") +  scale_fill_manual(values = cols) + theme_minimal_vgrid() + theme(axis.text.y = element_blank()) + ylab("number of tissues") + coord_flip() + scale_y_continuous(breaks= pretty_breaks())
+p = ggplot(ntissue_per_disease, aes(x = name, y = n, fill = LCC.signif)) + 
+  geom_bar(stat = "identity") +  
+  scale_fill_manual(values = cols) +
+  theme_minimal_vgrid()  + 
+  ylab("number of tissues") + 
+  coord_flip() + 
+  scale_y_continuous(breaks= pretty_breaks())
 
-#ggsave("../Figs/barplot_ntissue_per_disease_for_heatmap_network_disease_association_orphanets_genetic.pdf", width = 0.25*1.1*0.5*A4width, height = 1.1*0.175*A4height)
+P_without_label <- p + theme(axis.text.y = element_blank())
+#ggsave("../Figs/barplot_ntissue_per_disease_for_heatmap_network_disease_association_orphanets_genetic.pdf",  width = 0.25*1.1*0.5*A4width, height = 1.1*0.175*A4height)
 
 p
 ```
@@ -94,14 +105,19 @@ p
 
 ```{r}
 # number of significant diseases
-ndisease_per_tissue = result_df %>% dplyr::filter(LCC.signif!="none") %>% count(network, LCC.signif, main_type) %>% mutate(network = fct_reorder(network, n, sum, .desc = T))
+ndisease_per_tissue = result_df %>% 
+  dplyr::filter(LCC.signif!="none") %>% 
+  count(network, LCC.signif, main_type, subtype) %>% 
+  mutate(network = fct_reorder(network, n, sum, .desc = T),
+         subtype = fct_reorder(subtype, n, sum, .desc = T)) 
 
 
-p = ggplot(ndisease_per_tissue, aes(x = network, y = n, fill = LCC.signif)) + geom_bar(stat = "identity")  +  scale_fill_manual(values = cols)+ theme_minimal_hgrid() + ylab("number of disease groups") + scale_y_continuous(breaks= pretty_breaks()) + theme(axis.text.x = element_blank())  + facet_grid(.~main_type, space = "free", scale = "free") 
+p = ggplot(ndisease_per_tissue, aes(x = subtype, y = n, fill = LCC.signif)) + geom_bar(stat = "identity")  +  scale_fill_manual(values = cols)+ theme_minimal_hgrid() + ylab("number of disease groups") + scale_y_continuous(breaks= pretty_breaks())  + facet_grid(.~main_type, space = "free", scale = "free") 
 
+P_without_label <- p + theme(axis.text.x = element_blank())
 #ggsave("../Figs/barplot_ndisease_per_tissue_for_heatmap_network_disease_association_orphanets_genetic.pdf", width = 1.1*0.5*A4width, height = 0.35*1.1*0.175*A4height)
 
-p
+p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
 

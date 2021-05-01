@@ -33,7 +33,7 @@ This supplementary report is aimed to be a reproducible walk-through guide for f
 2. The corresponding code chunks to each figures/analyses are provided above the output, and are hidden by default. To expand each code chunk, click `Show code`.
 3. This report mainly contains visualization and post-processing of major analyses. Heavier computations were pre-computed, and corresponding `R`, `sh`, or `py` scripts required for each analysis are mentioned for each section. These files are available in `./source` folder.
 4. The pre-computed results are saved in `./cache` folder and can be downloaded from: [link](https://drive.google.com/file/d/1T7tJMojIbELeT-aLOD_Pv639eUgdGqUh/view) 
-5. The corresponding `Rmd` files used to produce this report can be found in `./report/` folder.
+5. The corresponding `Rmd` files used to produce this report can be found in `./report/` folder. The report mainly focuses on reproducing results shown in the manuscripts. For explanation, discussion, and references, please refer to the main manuscript.
 
 ```{r global setup, include=FALSE}
 filter <- dplyr::filter
