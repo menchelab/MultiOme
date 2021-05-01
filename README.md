@@ -18,7 +18,7 @@ menchelab/Multiome/
 
 ## The Explorer
 The Explorer is a Shiny app made for exploring results included in the manuscript in details, and can be used as additional resources for investigating gene connectivity of a disease of interest.
-![Overview](https://github.com/menchelab/MultiOme/blob/main/Explorer/Figs/github/github_readme_overview.png?raw=true)
+![Overview](https://github.com/menchelab/MultiOme/blob/main/Explorer/Figs/github/github_readme_overview1.png?raw=true)
 
 ### Differential Modularity
 ![Differential Modularity](https://github.com/menchelab/MultiOme/blob/main/Explorer/Figs/github/github_readme_DiffMod.png?raw=true)
