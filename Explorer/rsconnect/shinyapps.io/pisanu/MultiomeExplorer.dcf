@@ -1,0 +1,13 @@
+name: MultiomeExplorer
+title: MultiomeExplorer
+username:
+account: pisanu
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4060116
+bundleId: 4543156
+url: https://pisanu.shinyapps.io/MultiomeExplorer/
+when: 1619863958.21413
+lastSyncTime: 1619863958.21414
+asMultiple: FALSE
+asStatic: FALSE

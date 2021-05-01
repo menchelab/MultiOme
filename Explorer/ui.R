@@ -1,11 +1,11 @@
-library(pacman)
-p_load(shiny, visNetwork, ggiraph)
+#library(pacman)
+#p_load(shiny, visNetwork, ggiraph)
+
+library(shiny)
+library(visNetwork)
+library(ggiraph)
 
 load("./data/precomputedData_ui.RData")
-
-select <- dplyr::select
-filter <- dplyr::filter
-
 
 shinyUI(fluidPage(
   
