@@ -1,11 +1,17 @@
 
 # load required packages
-library(pacman)
-p_load(ggplot2, visNetwork, igraph, RColorBrewer, shiny, cowplot, DT)
+#library(pacman)
+#p_load(ggplot2, visNetwork, igraph, RColorBrewer, shiny, cowplot, tidyverse)
+
+library(tidyverse)
+library(visNetwork)
+library(RColorBrewer)
+library(shiny)
+library(cowplot)
+library(igraph)
+
 
 # load required data
-
-
 
 load("./data/precomputedData_server.RData")
 
@@ -72,7 +78,7 @@ shinyServer(function(input, output) {
     dis <- input$diseases_DifMod
     
     return(list(
-      src = paste0("Figs/disease_modularity/networks_", dis ,"_separate_dimmed.png"),
+      src = paste0("Figs/module/", dis ,".png"),
       contentType = "image/png",
       width = 800,
       alt =  dis
@@ -103,7 +109,7 @@ shinyServer(function(input, output) {
     processed_result_df %>%
       dplyr::filter(name == input$diseases_DifMod, LCC.signif != "none") %>%
       arrange(desc(LCC.zscore)) %>% 
-      select(subtype, source, N_in_graph, LCC.size, LCC.mean, LCC.sd, LCC.zscore, LCC.signif)
+      dplyr::select(subtype, source, N_in_graph, LCC.size, LCC.mean, LCC.sd, LCC.zscore, LCC.signif)
   })
   
   output$LCCbarplot <- renderGirafe({
