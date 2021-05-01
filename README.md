@@ -31,7 +31,7 @@ The Explorer is a Shiny app made for exploring results included in the manuscrip
 ### Detailed Inspection
 ![Detailed Inspection](https://github.com/menchelab/MultiOme/blob/main/Explorer/Figs/github/github_readme_Inspection.png?raw=true)
 
-The Explorer can be launched via [this link](https://pisanu.shinyapps.io/MultiomeExplorer/)
+The Explorer can be launched via [this link](http://lem.westeurope.cloudapp.azure.com:8880/app/MultiOmeExplorer)
 
 ## The Repoducible Walkthrough Guides
 
