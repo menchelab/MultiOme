@@ -35,7 +35,7 @@ The Explorer can be launched via [this link](http://lem.westeurope.cloudapp.azur
 
 ## The Repoducible Walkthrough Guides
 
-[This supplementary report](/report/Supplementary_report.html) is aimed to be a reproducible walk-through guide for figures and analyses complementing the manuscript: Buphamalai et.al., *Network analysis reveals rare disease signatures across multiple levels of biological organization*, submitted to Nature Communications. (Almost) all of the figures and analyses can be reproduced via walk-through reports organized in the same order as the manuscript in RMarkdown format, and can be found in 
+[This supplementary report](/report/Supplementary_report.html) is aimed to be a reproducible walk-through guide for figures and analyses complementing the manuscript: Buphamalai et.al., *Network analysis reveals rare disease signatures across multiple levels of biological organization*, submitted to Nature Communications. (Almost) all of the figures and analyses can be reproduced via walk-through reports organized in the same order as the manuscript in RMarkdown format, and can be found in [report/](report) folder. 
 
 PLease find the following guidelines:
 

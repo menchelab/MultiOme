@@ -59,7 +59,7 @@ shinyUI(fluidPage(
                         
                  ), #column 1: plot options
                  column(width=8,
-                         tags$p('Network-disease landscape (node2vec + t-SNE) shown for a particular embedded network. THe white dots represent causal genes for the corresponding disease group'),
+                         tags$p('Network-disease landscape (node2vec + t-SNE) shown for a particular embedded network. The white dots represent causal genes for the corresponding disease group'),
                         
                         
                         fluidRow(
