@@ -1,0 +1,6 @@
+2021-05-02 01:46:17.228  INFO 15407 --- [XNIO-1 task-3] e.o.containerproxy.service.UserService   : Anonymous user logged in [user: DDobHiUqdtoo-BodSwhmJqyrpJ0607cey7gj-lfI]
+2021-05-02 01:46:17.447  INFO 15407 --- [XNIO-1 task-3] e.o.containerproxy.service.UserService   : Anonymous user logged in [user: Eu_7cfYPQRDi4ayCr4z4ctHQ0G0yzw-YWHqPg5ke]
+2021-05-02 02:16:17.330  INFO 15407 --- [XNIO-1 task-3] e.o.containerproxy.service.UserService   : Anonymous user logged out [user: DDobHiUqdtoo-BodSwhmJqyrpJ0607cey7gj-lfI]
+2021-05-02 02:16:17.545  INFO 15407 --- [XNIO-1 task-3] e.o.containerproxy.service.UserService   : Anonymous user logged out [user: Eu_7cfYPQRDi4ayCr4z4ctHQ0G0yzw-YWHqPg5ke]
+2021-05-02 06:56:04.966  INFO 15407 --- [XNIO-1 task-3] e.o.containerproxy.service.UserService   : Anonymous user logged in [user: owKXQcpfTCCSX9jjWmvi4NKMcKuZWvnvUOvn_3cj]
+2021-05-02 07:26:05.020  INFO 15407 --- [XNIO-1 task-3] e.o.containerproxy.service.UserService   : Anonymous user logged out [user: owKXQcpfTCCSX9jjWmvi4NKMcKuZWvnvUOvn_3cj]
