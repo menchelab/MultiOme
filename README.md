@@ -33,11 +33,11 @@ The Explorer is a Shiny app made for exploring results included in the manuscrip
 
 The Explorer can be launched via [this link](http://lem.westeurope.cloudapp.azure.com:8880/app/MultiOmeExplorer)
 
-## The Repoducible Walkthrough Guides
+## The Reproducible Walkthrough Guides
 
 [This supplementary report](/report/Supplementary_report.html) is aimed to be a reproducible walk-through guide for figures and analyses complementing the manuscript: Buphamalai et.al., *Network analysis reveals rare disease signatures across multiple levels of biological organization*, submitted to Nature Communications. (Almost) all of the figures and analyses can be reproduced via walk-through reports organized in the same order as the manuscript in RMarkdown format, and can be found in [report/](report) folder. 
 
-PLease find the following guidelines:
+Please find the following guidelines:
 
 1. The appearance of sections in this document is at the same order as in the manuscript, and can be navigated using the Table of Content (ToC) appeared on the top left corner of this document, with subsections corresponding to exact figures/statistics 
 2. The corresponding code chunks to each figures/analyses are provided above the output, and are hidden by default. To expand each code chunk, click `Show code`.
