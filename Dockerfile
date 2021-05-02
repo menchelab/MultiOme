@@ -28,9 +28,9 @@ RUN R -e "install.packages('igraph')"
 
 # copy the app to the image
 RUN mkdir /root/Explorer
-COPY ../Explorer /root/Explorer
+COPY Explorer /root/Explorer
 
-COPY Rprofile.site /usr/lib/R/etc/
+COPY deploy/Rprofile.site /usr/lib/R/etc/
 
 EXPOSE 3838
 

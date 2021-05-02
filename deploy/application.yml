@@ -34,7 +34,7 @@ proxy:
     display-name: Multiome Explorer
     description: Application for detailed data exploration complementing Buphamalai et. al.
     #    container-cmd: ["R", "-e", "shiny::runApp('/root/Explorer')"]
-    container-image: multiome2
+    container-image: multiome
     access-groups: [scientists, mathematicians]
 
 logging:
