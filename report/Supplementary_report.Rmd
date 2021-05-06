@@ -60,3 +60,13 @@ select <- dplyr::select
 
 ```{r child = '7_Patient_gene_prioritization.Rmd'}
 ```
+
+# Session Information
+
+```{r}
+pacman::p_load(report)
+report_session <- report(sessionInfo())
+write_lines(report_session, "report_session.md")
+print(report_session)
+```
+

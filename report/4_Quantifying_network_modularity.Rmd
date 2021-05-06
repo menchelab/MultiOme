@@ -65,7 +65,7 @@ LCC_heatmap_plot = function(result_folder, heatmap_file){
 
 ```{r, out.width="100%"}
 rare_genetic_result_folder = "../cache/output/Orphageneset_rare/"
-rare_genetic_heatmap_file = "../Figs/heatmap_network_disease_association_orphanets_genetic_rare_diseases.pdf"
+rare_genetic_heatmap_file = "../cache/heatmap_network_disease_association_orphanets_genetic_rare_diseases.pdf"
 
 if(!file.exists(rare_genetic_heatmap_file)){
   LCC_heatmap_plot(rare_genetic_result_folder, rare_genetic_heatmap_file)

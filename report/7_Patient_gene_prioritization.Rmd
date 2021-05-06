@@ -100,7 +100,7 @@ p_rank[[i]]  <- ggplot(correct_rank) +
   xlab("Patient") +
   ylab("# Candidate genes")
 
-ggsave(p_rank[[i]], filename = paste0("../Figs/patient_gene_ranking_",i,".pdf"), width = 2.5, height = 3)
+#ggsave(p_rank[[i]], filename = paste0("../Figs/patient_gene_ranking_",i,".pdf"), width = 2.5, height = 3)
 }
 
 library(patchwork)
