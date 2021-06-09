@@ -62,8 +62,25 @@ reactome_copathway_df = reactome_df %>%
 
 ## remove the pair with less than four pathways
 #reactome_copathway_filtered_df = reactome_copathway_df[reactome_copathway_df$weight > 1,]
+
 reactome_copathway_filtered_df = reactome_copathway_df
 
+
+
+# invert list:
+d1 <- stack(reactome)
+reactome_by_element <- split(as.character(d1$ind), d1$values)
+
+# take valid gene symbols
+source("../functions/fn_source.R")
+entrez_names <- IDconvert(names(reactome_by_element), from = "SYMBOL", to = "ENTREZID")
+
+# consider only valid genes
+reactome_by_element <- reactome_by_element[names(entrez_names)[!is.na(entrez_names)]]
+
+reactome_comember_df <- as_tibble(t(combn(names(reactome_by_element),2, simplify = T)))
+
+reactome_comember_df$shared_pathway <- apply(reactome_comember_df, 1, function(x) intersect(reactome_by_element[[x[1]]], reactome_by_element[[x[2]]]) )
 
 # apply disparity filter (optional scenario)
 #source("~/Documents/projects/universal_fn/network_functions.R")
