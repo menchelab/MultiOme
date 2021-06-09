@@ -54,10 +54,6 @@ dlapply = function(list, func){
   return(nested_output)
 }
 
-#############################
-# GTEx: tissue mapped to gganatogram tissues
-#############################
-
 
 
 ##############################

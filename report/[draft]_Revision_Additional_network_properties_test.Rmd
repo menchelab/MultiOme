@@ -1,0 +1,241 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Properties and performance of PPI when looking at large-scale and curated database
+
+# Format the additional databases
+
+```{r}
+# read data
+library(pacman, reshape2, patchwork)
+
+source("../functions/fn_source.R")
+source("../functions/readdata_functions.R")
+```
+
+```{r, include=TRUE, eval=F}
+# Process PPI data
+#########
+
+# HuRI- process networks using gene names as identifiers
+HuRI_df <- read_tsv("../data/raw_data/HuRI.tsv", col_names = c("A","B"))
+HuRI_df$A <- IDconvert(HuRI_df$A, from = "ENSEMBL", to = "SYMBOL")
+HuRI_df$B <- IDconvert(HuRI_df$B, from = "ENSEMBL", to = "SYMBOL")
+
+HuRI_df <- distinct(HuRI_df,A,B)
+write_tsv(HuRI_df, "../data/network_edgelist_additional/ppi_HuRI.tsv")
+
+# BioPlex
+Bioplex_df <- read_tsv("../data/raw_data/BioPlex.tsv")
+write_tsv(Bioplex_df %>% select(SymbolA, SymbolB), "../data/network_edgelist_additional/ppi_BioPlex.tsv")
+
+# core transcriptional modules
+coex_el_sum <- readRDS("../cache/coexpression_raw_edge_counts.RDS")
+coex_core <- coex_el_sum %>% filter(n>5) %>% select(A,B)
+write_tsv(coex_core, file = "../data/network_edgelist_additional/coex_core.tsv")
+```
+
+
+## Load the new network data
+```{r}
+p_load(igraph)
+
+g <- process_graph_data("../data/network_edgelist_additional//")
+
+# Add PPI
+g$PPI_HIPPIE <- process_graph_data("../data/network_edgelists/ppi.tsv")[[1]]
+
+# measure overlaps between these data
+g$PPI_LargeScale <-  g$ppi_HuRI %u% g$ppi_BioPlex
+write_tsv(as_data_frame(g$PPI_LargeScale), file = "../data/network_edgelist_additional/PPI_LargeScale.tsv")
+
+g$PPI_HIPPIECurated <- g$PPI_HIPPIE %m% g$PPI_LargeScale
+write_tsv(as_data_frame(g$PPI_HIPPIECurated), file = "../data/network_edgelist_additional/PPI_HIPPIECurated.tsv")
+
+# interrsection
+g$PPI_HIPPIELargeScale <- g$PPI_HIPPIE %s% g$PPI_LargeScale
+write_tsv(as_data_frame(g$PPI_HIPPIELargeScale), file = "../data/network_edgelist_additional/PPI_HIPPIELargeScale.tsv")
+```
+
+
+
+# Network properties analysis
+```{r}
+# code chunks from source/network_properties_analysis.R
+
+
+all_nodes = sapply(g, function(x) V(x)$name) %>% unlist %>% unique 
+
+# citation count (# PMID per genes, queried and processed by INDRA)
+citation_count = read_csv("../data/all_pmids_counts.csv", col_names = c("gene", "count"), col_types = "ci")
+citation_count = citation_count %>% arrange(-count) %>% mutate(rank = 1:nrow(.))
+
+citation_correlation = function(graph){
+  #' take the citation count and correlate it with the degree of each graph
+  
+  degree_g = degree(graph)
+  degree_g = tibble(gene = names(degree_g), degree = degree_g) 
+  degree_g = inner_join(degree_g, citation_count, by = "gene") %>% arrange(rank) 
+  #  degree_g =degree_g %>% filter(degree > 0) %>% group_by(gr=cut(degree, breaks=c(1,5,10,50,100,500,1000,5000), right=FALSE))
+  
+  #corval = cor(degree_g$count, degree_g$degree, method = "spearman")
+  return(degree_g)
+}
+
+degree_citation_df = lapply(g, citation_correlation)
+
+n_nodes = sapply(g, vcount)
+n_edges = sapply(g, ecount)
+density = sapply(g, edge_density)
+clustering = sapply(g, transitivity)
+local_clustering = sapply(g, function(graph) transitivity(graph, type = "average"))
+assortativity = sapply(g, function(graph) assortativity_degree(graph, directed = F))
+social_bias = sapply(degree_citation_df, function(x) cor(x$count, x$degree, method = "spearman"))
+
+# 3 - process the results and prepare for plotting
+
+g_prop_df = tibble(network = names(n_nodes), n_nodes, n_edges, density, clustering, local_clustering, assortativity, social_bias)
+g_prop_df = reshape2::melt(g_prop_df, variable.name = "property")
+
+
+g_prop_df =g_prop_df %>%
+  mutate(
+    # rename properties for readability
+    property = factor(property, labels = c("Number of nodes", "Number of edges", "Edge density", "Global clustering", "Avg local clustering", "Assortativity", "Social bias")),
+    # groups to plot
+    type = ifelse(grepl("core", network), "Co-expression", "PPI"), 
+    main_type = type,
+    subtype = sapply(network, function(x) strsplit(x ,"_")[[1]][2]), 
+    group = subtype, 
+    # alpha values (co-ex or not co-ex -- for aesthetic labelling)
+    alphaval = 0
+  )
+
+
+# get the stats from the original values
+
+g_prop_df_orig <- readRDS( "../cache/network_complementarity_topological.RDS")
+g_prop_coex <- g_prop_df_orig %>% filter(type == "Co-expression") %>% select(-source)
+g_prop_coex$group = "Tissue-specific"
+
+g_prop_Labelled_df <- rbind(g_prop_df, g_prop_coex)
+
+# make HIPPIE goes up the rank
+g_prop_Labelled_df$group <- fct_relevel(g_prop_Labelled_df$group, "HIPPIE", "HIPPIELargeScale", "HIPPIECurated", "Tissue-specific")
+g_prop_Labelled_df$group <- fct_relevel(g_prop_Labelled_df$group, rev)
+```
+
+
+
+```{r plot the results, fig.width=9, fig.height=2.5,  layout="l-body-outset"}
+p_load(ggforce)
+
+# create a list of  plots to patch together
+plot_combine = list()
+ for(type_network in unique(g_prop_Labelled_df$type)){
+  plot = list()
+    for(prop in unique(g_prop_Labelled_df$property)){
+    plot[[prop]] = g_prop_Labelled_df  %>% 
+      filter(type == type_network) %>%
+      arrange(group) %>% filter(property == prop) %>%
+      ggplot( aes(x=group, y=as.numeric(value))) + 
+    #  facet_grid(type ~ ., scales = "free", space = "free") +
+      geom_segment( aes(x=group, xend=group, y=0, yend=value), color="grey80", size=1.5) +
+      geom_violin(fill="#F8B100", alpha = 0.4, color = NA) +
+      geom_point( aes(color=alphaval), size=4, alpha=0.6) +
+      geom_sina(aes(color='0'), size=4, alpha=0.6) + # add jitters
+      geom_hline(yintercept=0, color='grey50', size=1,  linetype='dotted') +
+      theme_light() + 
+      coord_flip() +
+      theme(
+        panel.grid.major.y = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks.y = element_blank(),
+       # axis.text.y = element_blank(),
+      ) +
+      guides(color = F)+
+      xlab("") +
+      scale_color_manual(values = c("#F8B100",NA)) +
+      ylab(prop)
+    
+    # scale y log for some properties (n edges)
+    if(prop %in% c("Number of edges")){
+      plot[[prop]] = plot[[prop]] + scale_y_log10()
+    }
+    
+    # for the first plot, allows axis label
+    if(!prop %in% c("Number of nodes")){
+      plot[[prop]] = plot[[prop]] +  theme(axis.text.y = element_blank())
+    }
+    
+  }
+  
+  plot_combine[[type_network]] = plot$`Number of nodes` + plot$`Edge density` + plot$`Global clustering` + plot$Assortativity + plot$`Social bias` + plot_layout(nrow = 1)
+
+}
+
+
+plot_combi <- plot_combine$PPI/plot_combine$`Co-expression`
+
+
+# uncomment to save the plot as pdf
+#ggsave("../Figs/network_properties_characterisation.pdf", plot_combine, height = 2.5, width = 9)
+
+suppressWarnings(print(plot_combi))
+```
+
+## Disease associaton
+
+```{r}
+
+p_load(ggforestplot)
+rare_genetic_result_folder = "../cache/output/Orphageneset_rare_additionalNetworks//"
+rare_genetic_heatmap_file = "../cache/heatmap_network_disease_association_orphanets_genetic_rare_diseases_additionalNetworks.pdf"
+
+
+# for printing (cm)
+A4width = 21
+A4height = 29.7
+
+
+# defines colours used in the heatmap
+cols = RColorBrewer::brewer.pal(5, "Blues")
+cols = cols[2:5]
+
+# load  network labels
+network_info = read_tsv("../data/network_details.tsv")
+source("../functions/process_LCC_result.R")
+
+
+  ## process the results LCC significance
+  result_df = readRDS(paste0(rare_genetic_result_folder, "LCC_and_distance_calculation_results.RDS"))
+  
+  processed_result_df = process_LCC_result(result_df)
+  
+  processed_result_df <- processed_result_df %>% select(-c(type, main_type, subtype, source)) 
+  
+  processed_result_df <- left_join(processed_result_df, g_prop_df %>% select(-c(property, value, alphaval)) %>% distinct())
+  
+  p <- processed_result_df  %>% dplyr::filter(LCC.signif != "none") %>%
+    ggplot(aes(name, subtype)) + geom_tile(fill = "white") + facet_grid(.~main_type, space = "free", scale = "free")  +## to get the rect filled
+    # geom_point(aes(size = N_in_graph*1.7),  colour = LCC.signif)  +   ## geom_point for circle illusion
+     geom_stripes(odd = "grey90", even = "#00000000") +
+  #  theme_light() + 
+   # theme_forest() +
+    theme_minimal_hgrid() +
+    theme(panel.spacing = unit(0.25, "lines"),
+          axis.text.x = element_text(angle = 90, hjust = 1), 
+          panel.grid.major.y = element_line(colour="grey", linetype="dotted")) +
+      geom_point(aes(
+      size = log10(N_in_graph),
+      fill = LCC.signif,
+      colour = LCC.signif), alpha = 0.7)  + 
+    scale_color_manual(values = cols) +
+    # scale_size(range = c(1, 10))+             ## to tune the size of circles
+      coord_flip() +
+    labs(x="", y="") + guides(size = F)
+```
+
+

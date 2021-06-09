@@ -1,0 +1,19 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+coex_el_sum <- readRDS("../cache/coexpression_raw_edge_counts.RDS")
+
+coex_core <- coex_el_sum %>% filter(n>5) %>% select(A,B)
+
+write_tsv(coex_core, file = "../data/network_edgelist_additional/coex_core.tsv")
+
+for(i in c(1,5,10,20,30,37)){
+  print(sum(coex_el_sum$n > i))
+}
+```
+
+
+## test of co-exprssion network without extracting the core-transcription -> bet it's very dense and the significance is questionable

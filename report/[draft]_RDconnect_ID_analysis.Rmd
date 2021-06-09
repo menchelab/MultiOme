@@ -1,0 +1,145 @@
+
+# RD-connect data analyses
+
+```{r}
+###################
+## Test patient
+
+patient_data <- read_tsv("~/Downloads/Participants-2.tsv")
+
+patient_data %>% group_by(`Solved status`,`In platform`) %>% count 
+
+solved_patients <- patient_data %>% 
+  separate_rows(Genes,sep =  ";") %>%
+  filter(`In platform`, grepl("solved", Genes)) %>%
+  mutate(causal_gene = str_remove(Genes,pattern =  " \\(solved\\)"))
+
+# merge results from all methods
+
+solved_patient_annotated <- solved_patients %>% 
+  select(`Participant ID`, causal_gene, `Experiment ID`) %>%
+  rename(Patient = `Participant ID`, GeneName = causal_gene) %>%
+  mutate(causal = TRUE)
+```
+
+```{r load patient files}
+file_variants = list.files("../data/rd-connect/")
+
+# check if all patients are in the files
+ID_files <- sapply(file_variants, function(i) str_remove(i, ".tsv"))
+
+#missing variants
+missed_IDs <- setdiff(solved_patient_annotated$`Experiment ID`, ID_files)
+
+if(length(missed_IDs)==0){
+  print("All patients have corresponding files")
+} else{
+  sprintf("missing Experimental IDs: %s",paste(missed_IDs, collapse = ", "))
+}
+
+patient_variants <- list()
+for(i in file_variants){
+  patient_variants[[str_remove(i, ".tsv")]] <- read_tsv(paste0("../data/rd-connect/",i), skip_empty_rows = T, col_types = 'cccccc-ccccccccccc')
+}
+
+patient_variants_df <- bind_rows(patient_variants, .id = "Experiment ID")
+
+patient_variants_df <- left_join(patient_variants_df,solved_patient_annotated[,c('Patient', 'Experiment ID')]) %>% 
+  filter(Chr %in% c(1:22, "X","Y","MT"))
+
+# check if there are likely missing variants
+#chr_count <- patient_variants_df %>%
+#  count(`Experiment ID`, Chr)
+
+#ggplot(chr_count) + geom_tile(aes(y = `Experiment ID`, x = Chr, fill = n))
+```
+
+```{r }
+patient_all_genes_df <- patient_variants_df  %>%
+ # mutate(inPatient = TRUE) %>%
+  left_join(., solved_patient_annotated, by = c("Experiment ID", "Patient", Gene = 'GeneName')) %>%
+  distinct(`Experiment ID`, Patient, Gene, causal) 
+
+
+patients_withGenesFound <- patient_all_genes_df %>% count(`Experiment ID`, causal)  %>% 
+  filter(!is.na(causal)) %>% mutate(genefound = TRUE)
+
+
+patient_genes_df <- left_join(solved_patient_annotated, patients_withGenesFound[,c(1,4)])  
+  
+# this is to compare causal gene with the entire genome
+patient_annotated_df_all_methods <- bind_rows(patient_annotated_df, .id = "network_set")
+
+#patient_rank_full_genome <- patient_annotated_df_all_methods %>%
+#  left_join(., solved_patient_annotated) %>%
+#  group_by(Patient, network_set) %>%
+#  arrange(-avg) %>%
+#  mutate(network_rank = rank(-avg), total_variants = n()) %>%
+#  filter(causal)
+
+
+
+
+patient_all_genes_rank <- patient_annotated_df_all_methods %>%
+  select(network_set, Patient,  GeneName, seed, avg) %>%
+  # add the causal column
+   inner_join(., patient_all_genes_df, by = c("Patient", GeneName = "Gene")) %>%
+  filter(Patient %in% patient_genes_df$Patient[patient_genes_df$genefound]) %>%
+  # add gene count per patient + filter for patients with causal genes in the variant list
+  inner_join(., patient_all_genes_df %>%  count(Patient, name = "total_genes")) %>%
+  group_by(Patient, network_set) %>%
+  arrange(-avg) %>%
+  mutate(network_rank = rank(-avg))
+  
+
+
+patient_causal_gene_rank <- patient_all_genes_rank %>%
+  filter(causal) %>%
+  filter(!is.na(network_set)) %>%
+  mutate(rank_group = base::cut(network_rank, c(0:5, 10,20,500), labels = c(1,2,3,4,5,"top10","top20","over20")))
+
+patient_causal_gene_rank_df <- patient_causal_gene_rank %>%
+  select(-c(avg, rank_group)) %>%
+  pivot_wider(names_from = "network_set", values_from = "network_rank") 
+
+solved_patient_with_rank <- left_join(solved_patients, patient_causal_gene_rank_df) %>%
+  mutate(diffPPI = ppi - signif)
+
+patient_sort_by_performance <- patient_annotated_df_all_methods %>% filter(network_set == "signif") %>%
+  left_join(., patient_data, by = c('Patient' = 'Participant ID')) %>%
+  arrange(network_rank)
+
+
+###### AUC plot for patients
+
+AUC_plot <- patient_all_genes_rank %>%
+  mutate(pos = (network_rank-1)/(total_genes-1), 
+         label = ifelse(is.na(causal), 0,1))
+
+pacman::p_load(pROC)
+rocvals <- list()
+rocvals_df <- list()
+for(i in unique(AUC_plot$network_set)){
+  df <- AUC_plot %>% filter(network_set==i)
+  response <- df$label
+  predictor <- df$pos
+  rocvals[[i]] <- pROC::roc(response, predictor)
+  rocvals_df[[i]] <- tibble(Sensitivity =  rocvals[[i]]$sensitivities, Specificity = rocvals[[i]]$specificities)
+}
+
+
+rocvals_merged_df <- bind_rows(rocvals_df, .id = "rank_type")
+
+palettes <- c('#66c2a5','#fc8d62','#8da0cb')
+
+p <- ggplot(rocvals_merged_df, aes(x = Specificity, y = Sensitivity, col = rank_type)) + 
+  geom_line(size=2) + 
+  scale_x_reverse() + 
+  scale_color_manual(values = palettes) + guides(col = FALSE) +
+  cowplot::theme_cowplot()
+
+#ggsave(p, filename = "../Figs/patient_gene_ranking_AUC.pdf", width = 3, height = 3)
+
+p
+```
+

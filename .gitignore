@@ -7,9 +7,8 @@ networks/
 Figs/
 trials/
 cache/
-data/network_node2vec_results
-data/orphanet_onset
+data/
 report/draft
 report/test
-data/variants_list
 shiny/
+
