@@ -52,7 +52,11 @@ patient_variants_df <- left_join(patient_variants_df,solved_patient_annotated[,c
 #  count(`Experiment ID`, Chr)
 
 #ggplot(chr_count) + geom_tile(aes(y = `Experiment ID`, x = Chr, fill = n))
+
+
 ```
+
+# Filtering patients without causal genes described in their variant list
 
 ```{r }
 patient_all_genes_df <- patient_variants_df  %>%
@@ -66,7 +70,249 @@ patients_withGenesFound <- patient_all_genes_df %>% count(`Experiment ID`, causa
 
 
 patient_genes_df <- left_join(solved_patient_annotated, patients_withGenesFound[,c(1,4)])  
+
+solved_patient_genes <- patient_genes_df %>% filter(genefound) %>% pull(GeneName, name = `Experiment ID`)
+```  
+
+
+# Number of genes per patients
+
+```{r}
+genes_per_solved_patients <- patient_all_genes_df %>%
+  filter(`Experiment ID` %in% names(solved_patient_genes)) %>%
+  count(`Experiment ID`)
+
+ggplot(genes_per_solved_patients, aes(x=n,y = "N_genes")) + geom_boxplot() + geom_jitter()
+```
+```{r}
+pacman::p_load(ggstatsplot, hrbrthemes)
+gghistostats(
+  data = genes_per_solved_patients, # dataframe from which variable is to be taken
+  x = n, # numeric variable whose distribution is of interest
+  title = "Number of genes with rare variants per patient", # title for the plot
+  caption = "Intellectual disability patients (solved), RD-Connect",
+  test.value = 0, # default value is 0
+  binwidth = 10, # binwidth value (experiment)
+  ggtheme = cowplot::theme_cowplot()
+)
+```
+# HPO association to seed genes
+```{r eval=FALSE, include=TRUE}
+
+patient_hpo_df <- solved_patients %>%
+  separate_rows(`HPO ids`, sep = ";") %>%
+  # ensures the HPO term is properly labelled (start with HP)
+  filter(str_starts(string = `HPO ids`, pattern = "HP"), str_count(`HPO ids`)==10) %>%
+  distinct(`Participant ID`,`HPO ids`) 
+ 
+ 
+file_hpo <- "../cache/rdconnect_hpo_to_genes.RDS"
+
+if(!file.exists(file_hpo)){
+  pacman::p_load(pbapply)
   
+  # create a function for retrieving genes associated to a hpo term
+  hpo_genes_query = function(term){
+    url_hpo <- httr::GET(paste0("https://hpo.jax.org/api/hpo/term/",term,"/genes?max=-1"))
+    gene_list <- httr::content(url_hpo)
+    
+    # return gene label 
+    gene_names <- sapply(gene_list$genes, function(x) x$entrezGeneSymbol)
+    return(list(gene_names))
+  }
+  
+  hpo_gene_association <- pbapply::pbsapply(unique(patient_hpo_df$`HPO ids`), hpo_genes_query)
+
+  
+  saveRDS(hpo_gene_association, file_hpo)
+} else{
+  print("read precomputed HPO association")
+  hpo_gene_association <- readRDS(file_hpo)
+}
+
+
+# take only genes exist in network as seeds
+seed_genes <- patient_hpo_df %>% 
+  group_by(`Participant ID`) %>%
+  summarise(hpo_terms = list(`HPO ids`)) %>%
+  rowwise() %>%
+  mutate(associated_genes = list(hpo_gene_association[hpo_terms])) %>%
+  left_join(., solved_patients[,c("Participant ID", "Experiment ID")])
+```
+
+# Prediction based on genes associated with the phenotypes alone
+
+```{r}
+# Prediction based on HPO
+
+genes_associated_with_patient_phenotype <- seed_genes %>% rowwise() %>%
+  mutate(all_hpo_associated_genes = list(unique(unlist(associated_genes)))) %>%
+  pull(all_hpo_associated_genes, name = `Experiment ID`)
+
+patient_all_genes_with_features_df <- patient_all_genes_df %>%
+  rowwise() %>%
+  mutate(inHPO = Gene %in% genes_associated_with_patient_phenotype[[`Experiment ID`]])
+
+
+# Prediction based on popularity
+citation_count = read_csv("../data/all_pmids_counts.csv", col_names = c("gene", "count"), col_types = "ci") %>% 
+  arrange(-count) %>% 
+  mutate(rank = 1:nrow(.)) %>%
+  rename(PubMedRank = 'rank')
+
+patient_all_genes_with_features_df <- patient_all_genes_with_features_df %>%
+  left_join(., citation_count[,c('gene', 'PubMedRank')], by = c(Gene = 'gene'))
+
+# prediction based on brain expression
+gtex_avg_expression = read_tsv("../data/raw_data/GTEx_Analysis_2016-01-15_v7_RNASeQCv1.1.8_gene_median_tpm.gct", skip = 2)
+
+gtex_avg_expression_df <- tibble(Gene = gtex_avg_expression$Description, 
+                                 AllBrainAvg = apply(gtex_avg_expression[,grepl("Brain", colnames(gtex_avg_expression))], 1, mean),
+                                 FrontalCortex = gtex_avg_expression$`Brain - Frontal Cortex (BA9)`)
+
+patient_all_genes_with_features_df <- patient_all_genes_with_features_df %>%
+  left_join(., gtex_avg_expression_df)
+
+# prediction based on pathway involvements
+reactome_count_df <- read_tsv("../cache/reactome_pathway_counts.tsv", col_names = c("Gene", "n_pathways"), col_types = "ci", skip = 1)
+
+patient_all_genes_with_features_df <- patient_all_genes_with_features_df %>%
+  left_join(., reactome_count_df)
+
+
+
+# add ranks
+patient_all_genes_df_with_rank <- patient_all_genes_with_features_df %>%
+  group_by(`Experiment ID`) %>%
+  mutate(rank_HP = rank(!inHPO),
+         rank_popularity = rank(PubMedRank),
+         rank_expression_BrainAll = rank(-AllBrainAvg),
+         rank_expression_FrontalCortex = rank(-FrontalCortex),
+         rank_pathwaycounts = rank(-n_pathways)
+         )
+
+```
+
+
+# Citation and pathway counts
+```{r}
+# check citation count and pathway counts
+gene_prop_df <- inner_join(citation_count, reactome_count_df, by = c(gene = "Gene"))
+
+ggplot(gene_prop_df, aes(x = count, y = n_pathways)) + geom_point() + scale_x_log10() + scale_y_log10() + ggtitle("Pathway vs PubMed counts", subtitle = paste0("Spearman: ", round(cor(gene_prop_df$count, gene_prop_df$n_pathways), 3))) 
+```
+
+```{r}
+ggscatterstats(
+  data = gene_prop_df,
+  x = count,
+  y = n_pathways,
+  type = "Non-parametric", # type of test that needs to be run
+  xlab = "PubMed Count", # label for x axis
+  ylab = "#Pathways involved", # label for y axis
+  label.var = gene, # variable for labeling data points
+  label.expression = count > 5000 | n_pathways > 150, # expression that decides which points to label
+  title = "Pathway vs PubMed counts", # title text for the plot
+  caption = "Sources: PubMed count - INDRA, Pathway count - Reactome",
+ ggtheme = cowplot::theme_cowplot(), # choosing a different theme
+  # turn off `ggstatsplot` theme layer
+  marginal.type = "boxplot", # type of marginal distribution to be displayed
+  xfill = "pink", # color fill for x-axis marginal distribution
+  yfill = "#009E73" # color fill for y-axis marginal distribution
+)
+```
+```{r}
+gene_prop_GO_df <- inner_join(citation_count, BP_count) %>%
+  mutate(#meanSim = GOsimBP_mean[gene],
+         medianSim = GOsimBP_mean[gene])
+
+ggscatterstats(
+  data = subset(gene_prop_GO_df, BP_terms > 0),
+  x = count,
+  y = BP_terms,
+  type = "Non-parametric", # type of test that needs to be run
+  xlab = "PubMed Count", # label for x axis
+  ylab = "#Processes involved", # label for y axis
+  label.var = gene, # variable for labeling data points
+  label.expression = count > 5000 | BP_terms > 100, # expression that decides which points to label
+  title = "Pathway vs GO terms counts", # title text for the plot
+  caption = "Sources: PubMed count - INDRA, Process count - GO:BP",
+ ggtheme = cowplot::theme_cowplot(), # choosing a different theme
+  # turn off `ggstatsplot` theme layer
+  marginal.type = "boxplot", # type of marginal distribution to be displayed
+  xfill = "pink", # color fill for x-axis marginal distribution
+  yfill = "#009E73" # color fill for y-axis marginal distribution
+)
+```
+
+```{r}
+ggscatterstats(
+  data = subset(gene_prop_GO_df, GO_terms > 0),
+  x = count,
+  y = GO_terms,
+  type = "Non-parametric", # type of test that needs to be run
+  xlab = "PubMed Count", # label for x axis
+  ylab = "#Processes involved", # label for y axis
+  label.var = gene, # variable for labeling data points
+  label.expression = count > 5000 | GO_terms > 120, # expression that decides which points to label
+  title = "Pathway vs GO terms counts", # title text for the plot
+  caption = "Sources: PubMed count - INDRA, Process count - GO",
+ ggtheme = cowplot::theme_cowplot(), # choosing a different theme
+  # turn off `ggstatsplot` theme layer
+  marginal.type = "boxplot", # type of marginal distribution to be displayed
+  xfill = "pink", # color fill for x-axis marginal distribution
+  yfill = "#009E73" # color fill for y-axis marginal distribution
+)
+
+```
+
+```{r}
+
+
+ggscatterstats(
+  data = subset(gene_prop_GO_df, BPIC5 > 0),
+  x = count,
+  y = BPIC5,
+  type = "Non-parametric", # type of test that needs to be run
+  xlab = "PubMed Count", # label for x axis
+  ylab = "#Processes involved", # label for y axis
+  label.var = gene, # variable for labeling data points
+  label.expression = count > 5000 | BPIC5 > 80, # expression that decides which points to label
+  title = "Pathway vs GO terms counts", # title text for the plot
+  caption = "Sources: PubMed count - INDRA, Process count - GO",
+ ggtheme = cowplot::theme_cowplot(), # choosing a different theme
+  # turn off `ggstatsplot` theme layer
+  marginal.type = "boxplot", # type of marginal distribution to be displayed
+  xfill = "pink", # color fill for x-axis marginal distribution
+  yfill = "#009E73" # color fill for y-axis marginal distribution
+)
+```
+
+```{r}
+ggscatterstats(
+  data = subset(gene_prop_GO_df, medianSim > 0.45),
+  x = count,
+  y = medianSim,
+  type = "Non-parametric", # type of test that needs to be run
+  xlab = "PubMed Count", # label for x axis
+  ylab = "Median GO similarity", # label for y axis
+  label.var = gene, # variable for labeling data points
+  label.expression = count > 5000 | medianSim > 3.3, # expression that decides which points to label
+  title = "Pathway vs GO terms counts", # title text for the plot
+  caption = "Sources: PubMed count - INDRA, Process count - GO",
+ ggtheme = cowplot::theme_cowplot(), # choosing a different theme
+  # turn off `ggstatsplot` theme layer
+  marginal.type = "boxplot", # type of marginal distribution to be displayed
+  xfill = "pink", # color fill for x-axis marginal distribution
+  yfill = "#009E73" # color fill for y-axis marginal distribution
+)
+```
+
+
+
+```{r}
+
+patient_annotated_df <- 
 # this is to compare causal gene with the entire genome
 patient_annotated_df_all_methods <- bind_rows(patient_annotated_df, .id = "network_set")
 
@@ -76,9 +322,6 @@ patient_annotated_df_all_methods <- bind_rows(patient_annotated_df, .id = "netwo
 #  arrange(-avg) %>%
 #  mutate(network_rank = rank(-avg), total_variants = n()) %>%
 #  filter(causal)
-
-
-
 
 patient_all_genes_rank <- patient_annotated_df_all_methods %>%
   select(network_set, Patient,  GeneName, seed, avg) %>%
