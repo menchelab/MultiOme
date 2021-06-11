@@ -23,12 +23,13 @@ genes_bp <- lapply(gene_GO_terms, function(x) intersection_with_descendants(go, 
 mf <- go$id[go$name == "molecular_function"]
 genes_mf <- lapply(gene_GO_terms, function(x) intersection_with_descendants(go, roots=mf, x)) 
 
-#genes_bp_ic5 <- sapply(genes_bp, function(x) sum(GO_IC[x] > 5))
+genes_ic5 <- sapply(gene_GO_terms, function(x) sum(GO_IC[x] > 5))
 
 GO_count_by_genes <- tibble(gene = names(gene_GO_terms), 
                    BP_terms = sapply(genes_bp, length), 
                    MF_terms = sapply(genes_mf, length),
-                   AllGO_terms = sapply(gene_GO_terms, length))
+                   AllGO_terms = sapply(gene_GO_terms, length),
+                   Informative_GOterms = genes_ic5)
 
 
 write_tsv(GO_count_by_genes, "../cache/GO_terms_count_per_gene.tsv")

@@ -78,34 +78,141 @@ solved_patient_genes <- patient_genes_df %>% filter(genefound) %>% pull(GeneName
 # Number of genes per patients
 
 ```{r}
+library(report)
+
 genes_per_solved_patients <- patient_all_genes_df %>%
   filter(`Experiment ID` %in% names(solved_patient_genes)) %>%
   count(`Experiment ID`)
 
-ggplot(genes_per_solved_patients, aes(x=n,y = "N_genes")) + geom_boxplot() + geom_jitter()
+p <- ggplot(genes_per_solved_patients, aes(x=n, y = "")) + 
+  geom_violin(fill = "#fccf66") + 
+  geom_jitter(col = "#ebaf26" ) +
+ # ggforce::geom_sina() +
+    theme_minimal_vgrid() +
+    ggtitle("Distribution of genes", subtitle = report(genes_per_solved_patients$n)) +
+    xlab ("# genes per patient, filtered by rare variants") + 
+    ylab("")
+
+#ggsave("../Figs/RDconnect_genes_per_patient_violin.pdf", width = 6, height = 3)
+
+p
 ```
+
+
 ```{r}
 pacman::p_load(ggstatsplot, hrbrthemes)
-gghistostats(
+p_histopatient <- gghistostats(
   data = genes_per_solved_patients, # dataframe from which variable is to be taken
   x = n, # numeric variable whose distribution is of interest
   title = "Number of genes with rare variants per patient", # title for the plot
-  caption = "Intellectual disability patients (solved), RD-Connect",
+  caption = sprintf("Intellectual disability patients (solved), RD-Connect, range: [ %i, %i]", min(genes_per_solved_patients$n), max(genes_per_solved_patients$n)),
+  xlab = "#genes with potentially pathogenic variants",
   test.value = 0, # default value is 0
   binwidth = 10, # binwidth value (experiment)
   ggtheme = cowplot::theme_cowplot()
 )
+
+#ggsave("../Figs/RDconnect_genes_per_patient_histogram.pdf", plot = p_histopatient, width = 6, height = 4)
+
+p_histopatient
 ```
-# HPO association to seed genes
+
+## HPO per patient
 ```{r eval=FALSE, include=TRUE}
 
-patient_hpo_df <- solved_patients %>%
+patient_hpo_df <- patient_data %>%
+  filter(`Experiment ID` %in% names(solved_patient_genes)) %>%
   separate_rows(`HPO ids`, sep = ";") %>%
   # ensures the HPO term is properly labelled (start with HP)
   filter(str_starts(string = `HPO ids`, pattern = "HP"), str_count(`HPO ids`)==10) %>%
-  distinct(`Participant ID`,`HPO ids`) 
+  distinct(`Experiment ID`,`HPO ids`) 
  
- 
+HPO_count <- patient_hpo_df %>%
+  count(`HPO ids`) %>%
+  arrange(-n)
+
+HPO_details <- read_tsv("../data/raw_data/HPO_phenotype_to_genes.txt", 
+                        col_types = c('cc-----'), col_names = c("HPOID", "HPOname"),
+                        skip = 1) %>%
+  distinct()
+
+HPO_count <- left_join(HPO_count, HPO_details, by = c(`HPO ids` = "HPOID"))
+
+HPO_count$HPOname <- factor(HPO_count$HPOname, levels = rev(HPO_count$HPOname))
+```
+
+```{r}
+# most abundant phenotypes
+
+library(cowplot)
+
+top_HP_terms <- HPO_count[1:20,]
+
+# relabel the particular term that are too long
+top_HP_terms$HPOname <- fct_recode(top_HP_terms$HPOname, !!!c("Delayed speech"="Delayed speech and language development")) 
+#labels(top_HP_terms$HPOname)[2] <- "Delayed Speech"
+top_HP_terms$queried_term <- grepl("Intellectual disability", top_HP_terms$HPOname)
+
+p_HPOcount <- ggplot(top_HP_terms, aes(x = n, y = HPOname)) + 
+  geom_col(aes(fill = queried_term)) + 
+  theme_cowplot() +
+  ggtitle("Most frequent phenotypes") +
+  xlab ("# Patients") + 
+  ylab("Phenotype term") +
+  scale_fill_manual(values = rev(c("#fccf66", "#8DB5CD"))) +
+  guides(fill = F)
+
+ggsave("../Figs/RDconnect_top20_phenotypes.pdf", plot = p_HPOcount, width = 6, height = 4)
+
+p_HPOcount
+```
+```{r}
+HPO_count_per_patient <- patient_hpo_df %>%
+  count(`Experiment ID`) %>%
+  arrange(-n)
+
+p_HPO_count_per_patient <- ggplot(HPO_count_per_patient, aes(x = n)) + 
+  geom_histogram(fill = "#fccf66") + 
+  theme_cowplot() +
+  ggtitle("# Phenotypic terms per patient") +
+  xlab ("# Phenotype terms") + 
+  ylab("# Patients") +
+  scale_y_continuous(breaks = c(1,3,5,7,9))
+
+#ggsave("../Figs/RDconnect_HPO_count_per_patient.pdf", plot = p_HPO_count_per_patient, width = 6, height = 2.5)
+
+p_HPO_count_per_patient
+```
+
+```{r}
+Patients_with_diagnostics <-  tibble(`Experiment ID` = patient_data$`Experiment ID`,
+                                     Diagnosed = patient_data$`ORDO disorder` != "unknown")
+                                     #Diagnosed = ifelse(patient_data$`OMIM disorder` != "unknown" | patient_data$`ORDO disorder` != "unknown" , T, F) )
+
+HPO_count_per_patient_tile <- HPO_count_per_patient %>%
+  left_join(., Patients_with_diagnostics) %>%
+  arrange(Diagnosed) %>%
+  group_by(n) %>%
+  mutate(pos = 1:n())
+
+p_HPO_count_per_patient_tile <- ggplot(HPO_count_per_patient_tile, aes(x = n, y = pos)) + 
+  geom_tile(aes(fill = Diagnosed), col = "#DADADA", size = 0.8) + 
+  theme_cowplot() +
+  ggtitle("# Phenotypic terms per patient") +
+  xlab ("# Phenotype terms") + 
+  ylab("# Patients") +
+  scale_y_continuous(breaks = c(1,3,5,7,9)) +
+  scale_fill_manual(values = rev(c("#fccf66", "#8DB5CD"))) +
+  guides(fill = F)
+
+ggsave("../Figs/RDconnect_HPO_count_per_patient_tiled.pdf", plot = p_HPO_count_per_patient_tile, width = 6*1.25, height = 2*1.25)
+
+#p_HPO_count_per_patient_tile
+```
+
+
+## HPO association to seed genes
+```{r}
 file_hpo <- "../cache/rdconnect_hpo_to_genes.RDS"
 
 if(!file.exists(file_hpo)){
@@ -153,31 +260,6 @@ patient_all_genes_with_features_df <- patient_all_genes_df %>%
   rowwise() %>%
   mutate(inHPO = Gene %in% genes_associated_with_patient_phenotype[[`Experiment ID`]])
 
-
-# Prediction based on popularity
-citation_count = read_csv("../data/all_pmids_counts.csv", col_names = c("gene", "count"), col_types = "ci") %>% 
-  arrange(-count) %>% 
-  mutate(rank = 1:nrow(.)) %>%
-  rename(PubMedRank = 'rank')
-
-patient_all_genes_with_features_df <- patient_all_genes_with_features_df %>%
-  left_join(., citation_count[,c('gene', 'PubMedRank')], by = c(Gene = 'gene'))
-
-# prediction based on brain expression
-gtex_avg_expression = read_tsv("../data/raw_data/GTEx_Analysis_2016-01-15_v7_RNASeQCv1.1.8_gene_median_tpm.gct", skip = 2)
-
-gtex_avg_expression_df <- tibble(Gene = gtex_avg_expression$Description, 
-                                 AllBrainAvg = apply(gtex_avg_expression[,grepl("Brain", colnames(gtex_avg_expression))], 1, mean),
-                                 FrontalCortex = gtex_avg_expression$`Brain - Frontal Cortex (BA9)`)
-
-patient_all_genes_with_features_df <- patient_all_genes_with_features_df %>%
-  left_join(., gtex_avg_expression_df)
-
-# prediction based on pathway involvements
-reactome_count_df <- read_tsv("../cache/reactome_pathway_counts.tsv", col_names = c("Gene", "n_pathways"), col_types = "ci", skip = 1)
-
-patient_all_genes_with_features_df <- patient_all_genes_with_features_df %>%
-  left_join(., reactome_count_df)
 
 
 
