@@ -130,7 +130,7 @@ g_prop_Labelled_df$group <- fct_relevel(g_prop_Labelled_df$group, rev)
 
 
 ```{r plot the results, fig.width=9, fig.height=2.5,  layout="l-body-outset"}
-p_load(ggforce)
+p_load(ggforce, patchwork)
 
 # create a list of  plots to patch together
 plot_combine = list()
@@ -236,6 +236,9 @@ source("../functions/process_LCC_result.R")
     # scale_size(range = c(1, 10))+             ## to tune the size of circles
       coord_flip() +
     labs(x="", y="") + guides(size = F)
+  
+  
+p
 ```
 
 

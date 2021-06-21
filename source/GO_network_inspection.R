@@ -30,14 +30,14 @@ go_df <- go_df %>%
 ### Load GO data for detailed inspection
 
 # CO sim mat
-GosimBP <- readRDS("../cache/GO_similarity_matrix_biological_process.RDS")
+#GosimBP <- readRDS("../cache/GO_similarity_matrix_biological_process.RDS")
 
-{sim_allgenes <- GosimBP[lower.tri(GosimBP)]
+#{sim_allgenes <- GosimBP[lower.tri(GosimBP)]
 
-{pdf("../Figs/histogram_GOBP_similarity.pdf", height = 3.35, width = 4.75)
-  hist(sim_allgenes, breaks = 100, col = "#F8B100", main = "GOBP pairwise similarity", xlab = "Similarity score", border = "white")
-  dev.off()
-}}
+#{pdf("../Figs/histogram_GOBP_similarity.pdf", height = 3.35, width = 4.75)
+#  hist(sim_allgenes, breaks = 100, col = "#F8B100", main = "GOBP pairwise similarity", xlab = "Similarity score", border = "white")
+#  dev.off()
+#}}
 
 
 # Load functions needed
@@ -54,6 +54,9 @@ GO_pvalmat = backbone_cal(GOBP_sim_mat_filter)
 # functions creating sets of plots for detailed inspection 
 
 GO_pairwise_compare_plot = function(gene1, gene2){
+  require(ggraph)
+  require(tidygraph)
+  
   terms1 <- gene_GO_terms[[gene1]]
   terms2 <- gene_GO_terms[[gene2]]
   
@@ -80,11 +83,6 @@ GO_pairwise_compare_plot = function(gene1, gene2){
            label = factor(label, levels = c("both", gene1, gene2, "none"))
     ) 
   
-  
-  
-  library(ggraph)
-  library(tidygraph)
-  
   graph <- tbl_graph(go_dat$vertices, go_dat$edges)
   
   
@@ -97,6 +95,8 @@ GO_pairwise_compare_plot = function(gene1, gene2){
   p_go_dendro <- ggraph(graph, 'tree') + 
     geom_edge_diagonal(edge_colour = "grey") +
     geom_node_point(aes(alpha = interm1 | interm2, col = label))+
+    #geom_node_text(aes( label = ifelse(interm1 & interm2, description, ""))) +
+    geom_node_text(aes( label = ifelse(ic > 9.85 & interm2, description, ""))) +
     scale_alpha_manual(values = c(0,1)) +
     scale_color_manual(values = c('#66c2a5','#fc8d62','#8da0cb',"#FFFFFF")) +
     guides(alpha = F) +
@@ -113,6 +113,16 @@ GO_pairwise_compare_plot = function(gene1, gene2){
   #  guides(alpha = F) +
   #  theme_nothing() +
   #  coord_fixed()
+  
+  #information_content <- descendants_IC(go)
+  
+  
+#  terms1 <- go_dat$vertices %>% arrange(label) %>% filter(interm1) %>% pull(name)
+#  terms2 <- go_dat$vertices %>% arrange(label) %>% filter(interm2)  %>% pull(name)
+  
+#  sim_mat <- ontologySimilarity::get_term_sim_mat(ontology=go,method = "resnik", row_terms = terms1, col_terms = terms2, information_content = GO_IC)
+  
+ # heatmap(sim_mat, Rowv = NA, Colv = NA, col = RColorBrewer::brewer.pal(11,'RdYlBu'))     
   
   
   common_terms_df <- go_dat$vertices %>% filter(label != "none") %>% select(-interm1, -interm2)
@@ -180,23 +190,52 @@ GO_pairwise_compare_plot = function(gene1, gene2){
 }
 
 # explore examples of different gene pairs
-GO_pairwise_compare_plot(  "TP53", "TGFB1")
+
+gene_pairs_to_plot <- tibble(gene1 = c("TP53", "SLC12A9","OR10J3","EMC3"),
+                             gene2 = c("TGFB1", "ABCC3", "OR13G1", "EMC1"))
 
 
-GO_pairwise_compare_plot("SLC12A9", "ABCC3")
+# plot and save results for these gene pairs
+apply(gene_pairs_to_plot, 1, GO_pairwise_compare_plot)
 
-GO_pairwise_compare_plot("VTI1B", "STX5")
-
-GO_pairwise_compare_plot("OR10J3", "OR13G1")
-
-GO_pairwise_compare_plot("EMC3", "EMC1")
+# get data frame for shared genes
 
 
+gene_pairs_to_plot$term_union <- apply(gene_pairs_to_plot, 1, function(x) length(unique(unlist(gene_GO_terms[x]))))
+gene_pairs_to_plot$term_gene1 <- sapply(gene_GO_terms[gene_pairs_to_plot$gene1], length)
+gene_pairs_to_plot$term_gene2 <- sapply(gene_GO_terms[gene_pairs_to_plot$gene2], length)
+gene_pairs_to_plot <- gene_pairs_to_plot %>%
+  mutate(term_overlap = term_gene1 + term_gene2 - term_union,
+         term_gene1_only = term_gene1 - term_overlap,
+         term_gene2_only = term_gene2 - term_overlap)
 
-term_df <- left_join(gene_feature_df %>% select(gene, BP_terms, count) %>% filter(BP_terms + count >0), degree_df) 
+gene_pairs_to_plot_df <- gene_pairs_to_plot %>%
+  select(gene1, term_gene1_only, term_overlap, term_gene2_only) %>%
+  pivot_longer(cols = c(term_gene1_only, term_overlap, term_gene2_only), names_to = "set", values_to = "n") %>%
+  mutate(set = factor(set, levels = c("term_gene1_only", "term_overlap", "term_gene2_only"))) %>%
+  group_by(gene1) %>%
+  mutate(frac_n = n/sum(n))
+         
+p_bar_frac <-ggplot(gene_pairs_to_plot_df) + geom_bar(aes(x = gene1, y = frac_n, fill = set), stat="identity") +
+  scale_fill_manual(values = c('#fc8d62','#66c2a5','#8da0cb')) +
+  ylab("#fraction GO terms") +
+  xlab("") +
+  guides(fill = F) +
+  theme(axis.text.x = element_blank()) +
+  theme_cowplot()
 
-term_df$degree[is.na(term_df$degree)] = 0
 
+p_bar_union  = ggplot(gene_pairs_to_plot) + geom_col(aes(x = gene1, y = term_union), fill = "grey50") +
+  ylab("#GO terms") +
+  xlab("") +
+  scale_y_log10() +
+  guides(fill = F) +
+  theme(axis.text.x = element_blank()) +
+  theme_cowplot()
+
+
+ggsave(sprintf("../Figs/GO_stat_bar_all_example.pdf"), p_bar_frac, width = 2, height = 2.5)  
+ggsave(sprintf("../Figs/GO_stat_bar_union_all_example.pdf"), p_bar_union, width = 2, height = 1.5)  
 
 # Global similarity score
 sim_df <- tibble(sim = GOBP_sim_mat_filter[lower.tri(GOBP_sim_mat_filter)],
@@ -220,4 +259,6 @@ p <- ggplot(term_df) +
   xlab("# GO terms (BP)") +
   ylab("GOBP degree")
 ggsave("../Figs/GO_degree_and_term_count.pdf", p, width = 4.5, height = 3.75)
+
+
 

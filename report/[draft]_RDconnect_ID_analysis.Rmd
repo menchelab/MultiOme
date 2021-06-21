@@ -2,24 +2,16 @@
 # RD-connect data analyses
 
 ```{r}
+library(pacman)
+p_load(cowplot)
 ###################
 ## Test patient
 
+# RD-connect
 patient_data <- read_tsv("~/Downloads/Participants-2.tsv")
 
-patient_data %>% group_by(`Solved status`,`In platform`) %>% count 
+#patient_data %>% group_by(`Solved status`,`In platform`) %>% count 
 
-solved_patients <- patient_data %>% 
-  separate_rows(Genes,sep =  ";") %>%
-  filter(`In platform`, grepl("solved", Genes)) %>%
-  mutate(causal_gene = str_remove(Genes,pattern =  " \\(solved\\)"))
-
-# merge results from all methods
-
-solved_patient_annotated <- solved_patients %>% 
-  select(`Participant ID`, causal_gene, `Experiment ID`) %>%
-  rename(Patient = `Participant ID`, GeneName = causal_gene) %>%
-  mutate(causal = TRUE)
 ```
 
 ```{r load patient files}
@@ -28,13 +20,16 @@ file_variants = list.files("../data/rd-connect/")
 # check if all patients are in the files
 ID_files <- sapply(file_variants, function(i) str_remove(i, ".tsv"))
 
-#missing variants
-missed_IDs <- setdiff(solved_patient_annotated$`Experiment ID`, ID_files)
-
-if(length(missed_IDs)==0){
-  print("All patients have corresponding files")
-} else{
-  sprintf("missing Experimental IDs: %s",paste(missed_IDs, collapse = ", "))
+check.missID = FALSE
+if(check.missID){
+    #missing variants (as upload process)
+  missed_IDs <- setdiff(solved_patient_annotated$`Experiment ID`, ID_files)
+  
+  if(length(missed_IDs)==0){
+    print("All patients have corresponding files")
+  } else{
+    sprintf("missing Experimental IDs: %s",paste(missed_IDs, collapse = ", "))
+  }
 }
 
 patient_variants <- list()
@@ -56,9 +51,77 @@ patient_variants_df <- left_join(patient_variants_df,solved_patient_annotated[,c
 
 ```
 
+```{r}
+
+solved_patients <- patient_data %>% 
+  separate_rows(Genes,sep =  ";") %>%
+  filter(`In platform`, grepl("solved", Genes)) %>%
+  mutate(causal_gene = str_remove(Genes,pattern =  " \\(solved\\)"))
+
+# merge results from all methods
+
+solved_patient_annotated <- solved_patients %>% 
+  select(`Participant ID`, causal_gene, `Experiment ID`) %>%
+  rename(Patient = `Participant ID`, GeneName = causal_gene) %>%
+  mutate(causal = TRUE)
+```
+
+
+## Adding internal cohort + add causal gene to the gene list if missing
+
+- A number of patients in the list (e.g. 40) have no variants in the gene indicated to be causal. This might be due to it being detect through other methods outside of the original data deposit. These data are included in the patient suspect gene list.
+
+```{r}
+# simply merge 
+RDConnect_patient_gene_df <- patient_variants_df  %>%
+ # mutate(inPatient = TRUE) %>%
+  select(`Experiment ID`, Patient, Gene)  %>%
+  rename(GeneName = Gene) %>%
+  distinct() %>%
+  # add the causal gene list to ensure it is in the patient list
+  rbind(solved_patient_annotated %>% select(-causal))  %>%
+  # count, if = 2 means it is found in both variant list and causal gene list -> meaning that the gene is found in the variant list
+  count(`Experiment ID`, Patient, GeneName, name = "causalInVariantList") %>%
+  mutate(causalInVariantList = factor(causalInVariantList, levels = c(1:2), labels = c(F,T)),
+         cohort = "RDConnect") %>%
+  left_join(., solved_patient_annotated)
+
+
+# Internal patient
+internal_patient_gene_list <- read_csv("../data/patient_gene_list.csv") %>%
+  mutate(`Experiment ID` = paste0("INT_", Patient_ID),
+         causal = ifelse(Diagnostic == "YES", TRUE, NA)) %>%
+  rename(GeneName = GENE) %>%
+  mutate(causalInVariantList = T,
+         cohort = "Internal") 
+
+# merge RDconnect and local data
+patient_gene_df <- rbind(RDConnect_patient_gene_df, internal_patient_gene_list %>%
+                           select(colnames(RDConnect_patient_gene_df)))
+
+
+# check if local gene is labelled in proper ID
+all_causal_genes <- patient_gene_df %>% filter(!is.na(causal)) %>% pull(GeneName) %>% unique()
+
+source("../functions/fn_source.R")
+all_causal_genes_ID <- IDconvert(all_causal_genes, from ="SYMBOL", to = "ENTREZID")
+
+# check which genes as no equiv id
+all_causal_genes_without_ID = all_causal_genes[is.na(all_causal_genes_ID)]
+
+# manually modify the genes without valid causal gene
+genes_without_ID_replace <- c("SIL1", "GMPPB", "TRNL1", "TRAPPC9")
+names(genes_without_ID_replace) = c("*608005", "*615320", "MT-TL1", "TRAPP9")
+
+patient_gene_df <- patient_gene_df %>%
+  mutate(GeneName = ifelse(GeneName %in% names(genes_without_ID_replace), genes_without_ID_replace[GeneName], GeneName))
+```
+
+
 # Filtering patients without causal genes described in their variant list
 
 ```{r }
+
 patient_all_genes_df <- patient_variants_df  %>%
  # mutate(inPatient = TRUE) %>%
   left_join(., solved_patient_annotated, by = c("Experiment ID", "Patient", Gene = 'GeneName')) %>%
@@ -88,7 +151,7 @@ p <- ggplot(genes_per_solved_patients, aes(x=n, y = "")) +
   geom_violin(fill = "#fccf66") + 
   geom_jitter(col = "#ebaf26" ) +
  # ggforce::geom_sina() +
-    theme_minimal_vgrid() +
+    cowplot::theme_minimal_vgrid() +
     ggtitle("Distribution of genes", subtitle = report(genes_per_solved_patients$n)) +
     xlab ("# genes per patient, filtered by rare variants") + 
     ylab("")
@@ -99,29 +162,32 @@ p
 ```
 
 
-```{r}
-pacman::p_load(ggstatsplot, hrbrthemes)
-p_histopatient <- gghistostats(
-  data = genes_per_solved_patients, # dataframe from which variable is to be taken
-  x = n, # numeric variable whose distribution is of interest
-  title = "Number of genes with rare variants per patient", # title for the plot
-  caption = sprintf("Intellectual disability patients (solved), RD-Connect, range: [ %i, %i]", min(genes_per_solved_patients$n), max(genes_per_solved_patients$n)),
-  xlab = "#genes with potentially pathogenic variants",
-  test.value = 0, # default value is 0
-  binwidth = 10, # binwidth value (experiment)
-  ggtheme = cowplot::theme_cowplot()
-)
-
-#ggsave("../Figs/RDconnect_genes_per_patient_histogram.pdf", plot = p_histopatient, width = 6, height = 4)
-
-p_histopatient
+```{r ggstatsplot histogram, eval=F, include=FALSE}
+# pacman::p_load(ggstatsplot, hrbrthemes)
+# p_histopatient <- gghistostats(
+#   data = genes_per_solved_patients, # dataframe from which variable is to be taken
+#   x = n, # numeric variable whose distribution is of interest
+#   title = "Number of genes with rare variants per patient", # title for the plot
+#   caption = sprintf("Intellectual disability patients (solved), RD-Connect, range: [ %i, %i]", min(genes_per_solved_patients$n), max(genes_per_solved_patients$n)),
+#   xlab = "#genes with potentially pathogenic variants",
+#   test.value = 0, # default value is 0
+#   binwidth = 10, # binwidth value (experiment)
+#   ggtheme = cowplot::theme_cowplot()
+# )
+# 
+# #ggsave("../Figs/RDconnect_genes_per_patient_histogram.pdf", plot = p_histopatient, width = 6, height = 4)
+# 
+# p_histopatient
 ```
 
-## HPO per patient
-```{r eval=FALSE, include=TRUE}
+
+## HPO per patient - RDconnect
+```{r rdconnect patient hpo extract, eval=FALSE, include=TRUE}
+
+RDConnect_solved_IDs <- patient_gene_df %>% filter(cohort == "RDConnect") %>% pull(`Experiment ID`) %>% unique()
 
 patient_hpo_df <- patient_data %>%
-  filter(`Experiment ID` %in% names(solved_patient_genes)) %>%
+  filter(`Experiment ID` %in% RDConnect_solved_IDs) %>%
   separate_rows(`HPO ids`, sep = ";") %>%
   # ensures the HPO term is properly labelled (start with HP)
   filter(str_starts(string = `HPO ids`, pattern = "HP"), str_count(`HPO ids`)==10) %>%
@@ -141,11 +207,8 @@ HPO_count <- left_join(HPO_count, HPO_details, by = c(`HPO ids` = "HPOID"))
 HPO_count$HPOname <- factor(HPO_count$HPOname, levels = rev(HPO_count$HPOname))
 ```
 
-```{r}
+```{r top phenotypes for RDconnect patients ALL}
 # most abundant phenotypes
-
-library(cowplot)
-
 top_HP_terms <- HPO_count[1:20,]
 
 # relabel the particular term that are too long
@@ -162,11 +225,13 @@ p_HPOcount <- ggplot(top_HP_terms, aes(x = n, y = HPOname)) +
   scale_fill_manual(values = rev(c("#fccf66", "#8DB5CD"))) +
   guides(fill = F)
 
-ggsave("../Figs/RDconnect_top20_phenotypes.pdf", plot = p_HPOcount, width = 6, height = 4)
+#ggsave("../Figs/RDconnect_top20_phenotypes.pdf", plot = p_HPOcount, width = 6, height = 4)
 
 p_HPOcount
 ```
-```{r}
+
+
+```{r phenotype per RDconnect patient}
 HPO_count_per_patient <- patient_hpo_df %>%
   count(`Experiment ID`) %>%
   arrange(-n)
@@ -207,12 +272,27 @@ p_HPO_count_per_patient_tile <- ggplot(HPO_count_per_patient_tile, aes(x = n, y 
 
 ggsave("../Figs/RDconnect_HPO_count_per_patient_tiled.pdf", plot = p_HPO_count_per_patient_tile, width = 6*1.25, height = 2*1.25)
 
-#p_HPO_count_per_patient_tile
+p_HPO_count_per_patient_tile
 ```
 
 
 ## HPO association to seed genes
 ```{r}
+internal_patient_hpo_df <- read_csv("../data/patient_hpo_terms.csv", 
+                           col_names = c('Patient', "hpo_id", "hpo_label"), skip = 1) %>%
+  mutate(hpo_id = str_trim(hpo_id, side = 'both')) %>%
+  left_join(., internal_patient_gene_list[,c("Patient","Patient_ID", "Experiment ID")]) %>%
+  distinct()
+
+
+patient_hpo_df_all_cohort <- rbind(patient_hpo_df, 
+                                   internal_patient_hpo_df %>% 
+                                     mutate(`HPO ids` = hpo_id) %>%
+                                     select(`Experiment ID`, `HPO ids`) 
+                                     
+                                     )
+
+
 file_hpo <- "../cache/rdconnect_hpo_to_genes.RDS"
 
 if(!file.exists(file_hpo)){
@@ -228,7 +308,7 @@ if(!file.exists(file_hpo)){
     return(list(gene_names))
   }
   
-  hpo_gene_association <- pbapply::pbsapply(unique(patient_hpo_df$`HPO ids`), hpo_genes_query)
+  hpo_gene_association <- pbapply::pbsapply(unique(patient_hpo_df_all_cohort$`HPO ids`), hpo_genes_query)
 
   
   saveRDS(hpo_gene_association, file_hpo)
@@ -239,12 +319,12 @@ if(!file.exists(file_hpo)){
 
 
 # take only genes exist in network as seeds
-seed_genes <- patient_hpo_df %>% 
-  group_by(`Participant ID`) %>%
+seed_genes <- patient_hpo_df_all_cohort %>% 
+  group_by(`Experiment ID`) %>%
   summarise(hpo_terms = list(`HPO ids`)) %>%
   rowwise() %>%
-  mutate(associated_genes = list(hpo_gene_association[hpo_terms])) %>%
-  left_join(., solved_patients[,c("Participant ID", "Experiment ID")])
+  mutate(associated_genes = list(hpo_gene_association[hpo_terms])) #%>%
+ # left_join(., solved_patients[,c("Participant ID", "Experiment ID")])
 ```
 
 # Prediction based on genes associated with the phenotypes alone
@@ -256,147 +336,116 @@ genes_associated_with_patient_phenotype <- seed_genes %>% rowwise() %>%
   mutate(all_hpo_associated_genes = list(unique(unlist(associated_genes)))) %>%
   pull(all_hpo_associated_genes, name = `Experiment ID`)
 
-patient_all_genes_with_features_df <- patient_all_genes_df %>%
+# how mayne gene phenotype patients are actually in the patients
+
+
+patient_all_genes_with_features_df <- patient_gene_df %>%
   rowwise() %>%
-  mutate(inHPO = Gene %in% genes_associated_with_patient_phenotype[[`Experiment ID`]])
+  mutate(inHPO = GeneName %in% genes_associated_with_patient_phenotype[[`Experiment ID`]])
 
 
+sum_patient_genes_in_HPO_df <- patient_all_genes_with_features_df %>%
+  filter(cohort == "RDConnect") %>%
+  count(`Experiment ID`, inHPO, name = "n_inHPO") %>% 
+  filter(inHPO) %>%
+  select(-inHPO) %>%
+  inner_join(., genes_per_solved_patients) %>%
+  pivot_longer(., cols = c("n","n_inHPO"), names_to = "group", values_to = "count") %>%
+  mutate(group = factor(group, levels = rev(c("n","n_inHPO")), labels = rev(c("All genes", "Genes related to \n patient phenotypes"))))
+
+
+p <- ggplot(sum_patient_genes_in_HPO_df, aes(x=count, y = group)) + 
+  geom_violin(fill = "#fccf66") + 
+  geom_jitter(col = "#ebaf26" ) +
+ # ggforce::geom_sina() +
+    cowplot::theme_minimal_vgrid() +
+    ggtitle("Distribution of genes")+#, subtitle = report(genes_per_solved_patients$n)) +
+    xlab ("# genes per patient, filtered by rare variants") + 
+    ylab("") + 
+  scale_x_log10()
+
+#ggsave("../Figs/RDconnect_genes_per_patient_violin_with_HPO_filter.pdf", width = 6, height = 3)
+
+p
+```
+
+
+```{r}
+
+# features
+gene_prop_df <- read_tsv("../cache/gene_features.tsv")
+
+patient_all_genes_with_features_df <- patient_all_genes_with_features_df %>%
+  left_join(., gene_prop_df, by = c(GeneName = "gene"))
+  
 
 
 # add ranks
 patient_all_genes_df_with_rank <- patient_all_genes_with_features_df %>%
   group_by(`Experiment ID`) %>%
-  mutate(rank_HP = rank(!inHPO),
+  mutate(rank_inHP = rank(!inHPO, ties.method = "random"),
+         rank_HP = rank(-HP_terms),
          rank_popularity = rank(PubMedRank),
          rank_expression_BrainAll = rank(-AllBrainAvg),
          rank_expression_FrontalCortex = rank(-FrontalCortex),
          rank_pathwaycounts = rank(-n_pathways)
          )
 
-```
+
+# plot ROC AUC
+
+feature_based_AUC_plot <- patient_all_genes_df_with_rank %>%
+  select(starts_with("rank_"), `Experiment ID`, GeneName, causal) %>%
+  mutate(total_gene = n()) %>%
+  pivot_longer(cols = starts_with("rank_"), names_to = "group", values_to = "rank") %>%
+  mutate(pos = (rank-1)/(total_gene-1), 
+         label = ifelse(is.na(causal), 0,1))
+
+pacman::p_load(pROC)
+rocvals <- list()
+rocvals_df <- list()
+for(i in unique(feature_based_AUC_plot$group)){
+  df <- AUC_plot %>% filter(group==i)
+  response <- df$label
+  predictor <- df$pos
+  rocvals[[i]] <- pROC::roc(response, predictor)
+  rocvals_df[[i]] <- tibble(Sensitivity =  rocvals[[i]]$sensitivities, Specificity = rocvals[[i]]$specificities)
+}
 
 
-# Citation and pathway counts
-```{r}
-# check citation count and pathway counts
-gene_prop_df <- inner_join(citation_count, reactome_count_df, by = c(gene = "Gene"))
+rocvals_merged_df <- bind_rows(rocvals_df, .id = "rank_type")
 
-ggplot(gene_prop_df, aes(x = count, y = n_pathways)) + geom_point() + scale_x_log10() + scale_y_log10() + ggtitle("Pathway vs PubMed counts", subtitle = paste0("Spearman: ", round(cor(gene_prop_df$count, gene_prop_df$n_pathways), 3))) 
-```
+palettes <- c('#66c2a5','#fc8d62','#8da0cb')
 
-```{r}
-ggscatterstats(
-  data = gene_prop_df,
-  x = count,
-  y = n_pathways,
-  type = "Non-parametric", # type of test that needs to be run
-  xlab = "PubMed Count", # label for x axis
-  ylab = "#Pathways involved", # label for y axis
-  label.var = gene, # variable for labeling data points
-  label.expression = count > 5000 | n_pathways > 150, # expression that decides which points to label
-  title = "Pathway vs PubMed counts", # title text for the plot
-  caption = "Sources: PubMed count - INDRA, Pathway count - Reactome",
- ggtheme = cowplot::theme_cowplot(), # choosing a different theme
-  # turn off `ggstatsplot` theme layer
-  marginal.type = "boxplot", # type of marginal distribution to be displayed
-  xfill = "pink", # color fill for x-axis marginal distribution
-  yfill = "#009E73" # color fill for y-axis marginal distribution
-)
-```
-```{r}
-gene_prop_GO_df <- inner_join(citation_count, BP_count) %>%
-  mutate(#meanSim = GOsimBP_mean[gene],
-         medianSim = GOsimBP_mean[gene])
-
-ggscatterstats(
-  data = subset(gene_prop_GO_df, BP_terms > 0),
-  x = count,
-  y = BP_terms,
-  type = "Non-parametric", # type of test that needs to be run
-  xlab = "PubMed Count", # label for x axis
-  ylab = "#Processes involved", # label for y axis
-  label.var = gene, # variable for labeling data points
-  label.expression = count > 5000 | BP_terms > 100, # expression that decides which points to label
-  title = "Pathway vs GO terms counts", # title text for the plot
-  caption = "Sources: PubMed count - INDRA, Process count - GO:BP",
- ggtheme = cowplot::theme_cowplot(), # choosing a different theme
-  # turn off `ggstatsplot` theme layer
-  marginal.type = "boxplot", # type of marginal distribution to be displayed
-  xfill = "pink", # color fill for x-axis marginal distribution
-  yfill = "#009E73" # color fill for y-axis marginal distribution
-)
-```
-
-```{r}
-ggscatterstats(
-  data = subset(gene_prop_GO_df, GO_terms > 0),
-  x = count,
-  y = GO_terms,
-  type = "Non-parametric", # type of test that needs to be run
-  xlab = "PubMed Count", # label for x axis
-  ylab = "#Processes involved", # label for y axis
-  label.var = gene, # variable for labeling data points
-  label.expression = count > 5000 | GO_terms > 120, # expression that decides which points to label
-  title = "Pathway vs GO terms counts", # title text for the plot
-  caption = "Sources: PubMed count - INDRA, Process count - GO",
- ggtheme = cowplot::theme_cowplot(), # choosing a different theme
-  # turn off `ggstatsplot` theme layer
-  marginal.type = "boxplot", # type of marginal distribution to be displayed
-  xfill = "pink", # color fill for x-axis marginal distribution
-  yfill = "#009E73" # color fill for y-axis marginal distribution
-)
-
-```
-
-```{r}
+p_roc_gene_prop <- ggplot(rocvals_merged_df, aes(x = Specificity, y = Sensitivity, col = rank_type)) + 
+  geom_line(size=2) + 
+  scale_x_reverse() + 
+  #scale_color_manual(values = palettes) + 
+  scale_color_brewer() + 
+#  guides(col = FALSE) +
+  cowplot::theme_cowplot()
 
 
-ggscatterstats(
-  data = subset(gene_prop_GO_df, BPIC5 > 0),
-  x = count,
-  y = BPIC5,
-  type = "Non-parametric", # type of test that needs to be run
-  xlab = "PubMed Count", # label for x axis
-  ylab = "#Processes involved", # label for y axis
-  label.var = gene, # variable for labeling data points
-  label.expression = count > 5000 | BPIC5 > 80, # expression that decides which points to label
-  title = "Pathway vs GO terms counts", # title text for the plot
-  caption = "Sources: PubMed count - INDRA, Process count - GO",
- ggtheme = cowplot::theme_cowplot(), # choosing a different theme
-  # turn off `ggstatsplot` theme layer
-  marginal.type = "boxplot", # type of marginal distribution to be displayed
-  xfill = "pink", # color fill for x-axis marginal distribution
-  yfill = "#009E73" # color fill for y-axis marginal distribution
-)
-```
-
-```{r}
-ggscatterstats(
-  data = subset(gene_prop_GO_df, medianSim > 0.45),
-  x = count,
-  y = medianSim,
-  type = "Non-parametric", # type of test that needs to be run
-  xlab = "PubMed Count", # label for x axis
-  ylab = "Median GO similarity", # label for y axis
-  label.var = gene, # variable for labeling data points
-  label.expression = count > 5000 | medianSim > 3.3, # expression that decides which points to label
-  title = "Pathway vs GO terms counts", # title text for the plot
-  caption = "Sources: PubMed count - INDRA, Process count - GO",
- ggtheme = cowplot::theme_cowplot(), # choosing a different theme
-  # turn off `ggstatsplot` theme layer
-  marginal.type = "boxplot", # type of marginal distribution to be displayed
-  xfill = "pink", # color fill for x-axis marginal distribution
-  yfill = "#009E73" # color fill for y-axis marginal distribution
-)
+p_roc_gene_prop
 ```
 
 
 
 ```{r}
 
-patient_annotated_df <- 
+patient_network_ranking_results <- "../cache/test_rdconnect_ranking_results.RDS"
+
+# if the result file are not there yet, load the data
+if(!file.exists(patient_network_ranking_results)){
+  source("../source/test/patient_rdconnect.R")
+}
+
+patient_annotated_df <- readRDS(patient_network_ranking_results)
 # this is to compare causal gene with the entire genome
-patient_annotated_df_all_methods <- bind_rows(patient_annotated_df, .id = "network_set")
+patient_annotated_df_all_methods <- bind_rows(patient_annotated_df, .id = "network_set") %>%
+  mutate(`Experiment ID` = Patient) %>%
+  select(network_set, `Experiment ID`,  GeneName, seed, avg)
+
 
 #patient_rank_full_genome <- patient_annotated_df_all_methods %>%
 #  left_join(., solved_patient_annotated) %>%
@@ -405,14 +454,15 @@ patient_annotated_df_all_methods <- bind_rows(patient_annotated_df, .id = "netwo
 #  mutate(network_rank = rank(-avg), total_variants = n()) %>%
 #  filter(causal)
 
+gene_per_patients <- patient_gene_df %>%
+    count(`Experiment ID`, name = "total_genes") 
+
 patient_all_genes_rank <- patient_annotated_df_all_methods %>%
-  select(network_set, Patient,  GeneName, seed, avg) %>%
   # add the causal column
-   inner_join(., patient_all_genes_df, by = c("Patient", GeneName = "Gene")) %>%
-  filter(Patient %in% patient_genes_df$Patient[patient_genes_df$genefound]) %>%
+   inner_join(., patient_gene_df) %>%
   # add gene count per patient + filter for patients with causal genes in the variant list
-  inner_join(., patient_all_genes_df %>%  count(Patient, name = "total_genes")) %>%
-  group_by(Patient, network_set) %>%
+  inner_join(., gene_per_patients) %>%
+  group_by(`Experiment ID`, network_set) %>%
   arrange(-avg) %>%
   mutate(network_rank = rank(-avg))
   
@@ -430,9 +480,9 @@ patient_causal_gene_rank_df <- patient_causal_gene_rank %>%
 solved_patient_with_rank <- left_join(solved_patients, patient_causal_gene_rank_df) %>%
   mutate(diffPPI = ppi - signif)
 
-patient_sort_by_performance <- patient_annotated_df_all_methods %>% filter(network_set == "signif") %>%
-  left_join(., patient_data, by = c('Patient' = 'Participant ID')) %>%
-  arrange(network_rank)
+#patient_sort_by_performance <- patient_annotated_df_all_methods %>% filter(network_set == "signif") %>%
+#  left_join(., patient_data, by = c('Patient' = 'Participant ID')) %>%
+#  arrange(network_rank)
 
 
 ###### AUC plot for patients
@@ -453,17 +503,113 @@ for(i in unique(AUC_plot$network_set)){
 }
 
 
-rocvals_merged_df <- bind_rows(rocvals_df, .id = "rank_type")
+rocvals_merged_df_network <- bind_rows(rocvals_df, .id = "rank_type")
 
 palettes <- c('#66c2a5','#fc8d62','#8da0cb')
 
-p <- ggplot(rocvals_merged_df, aes(x = Specificity, y = Sensitivity, col = rank_type)) + 
+p <- ggplot(rocvals_merged_df_network, aes(x = Specificity, y = Sensitivity, col = rank_type)) + 
   geom_line(size=2) + 
   scale_x_reverse() + 
-  scale_color_manual(values = palettes) + guides(col = FALSE) +
+  scale_color_manual(values = palettes) + #guides(col = FALSE) +
   cowplot::theme_cowplot()
 
 #ggsave(p, filename = "../Figs/patient_gene_ranking_AUC.pdf", width = 3, height = 3)
+
+p
+```
+
+```{r}
+ # look at the two of them closely
+
+palettes <-  c(RColorBrewer::brewer.pal(6, "Greens"), RColorBrewer::brewer.pal(3, "Blues"))
+
+results_combine <- rbind(rocvals_merged_df, rocvals_merged_df_network)
+results_combine$rank_type <- factor(results_combine$rank_type, levels = c(unique(rocvals_merged_df$rank_type), unique(rocvals_merged_df_network$rank_type)))
+
+p <- ggplot(results_combine, aes(x = Specificity, y = Sensitivity, col = rank_type)) + 
+  geom_line(size=2) + 
+  scale_x_reverse() + 
+  scale_color_manual(values = palettes) + #guides(col = FALSE) +
+  cowplot::theme_cowplot()
+
+p
+```
+
+Reduce the information to network examples
+```{r}
+palettes <-  c(RColorBrewer::brewer.pal(4, "Greens"), "#3182BD")
+
+selected_features <- c("rank_inHP", "rank_popularity", "rank_expression_BrainAll", "rank_pathwaycounts", "informedMultiPlex")
+
+selected_features_label <- c("Feature: Phenotype overlap", "Feature: PubMed counts", "Feature: Brain expression level", "Feature: Pathway counts", "Informed Multiplex Propagation")
+
+results_combine <- rbind(rocvals_merged_df, rocvals_merged_df_network) %>%
+  filter(rank_type %in% selected_features)
+
+results_combine$rank_type <- factor(results_combine$rank_type, levels = selected_features, label = selected_features_label)
+
+p <- ggplot(results_combine, aes(x = Specificity, y = Sensitivity, col = rank_type)) + 
+  geom_line(size=2) + 
+  scale_x_reverse() + 
+  scale_color_manual(values = palettes) + #guides(col = FALSE) +
+  cowplot::theme_cowplot()
+
+p
+```
+
+
+
+
+although this might look like it is incremental improvements over assigning HP alone, this is valuable for when narrowing down the variant list - or the case in which the causal genes are not yet associated to the phenotypes (elaborate on a few case here as well - yes it sucks but it's needed.) - also, with the omnigenic model - having such network-based approach for assessing pathogenic effects are anyway required.
+
+```{r}
+# performing p-value + AUC
+```
+
+
+```{r}
+network_based_rank <- patient_all_genes_rank %>%
+  ungroup() %>%
+  filter(!is.na(causal)) %>%
+  mutate(group = cut(network_rank, breaks = c(0,5,10,20,50,100,200,1000))) %>%
+  count(network_set, group)
+  
+
+feature_based_rank <- feature_based_AUC_plot %>%
+  ungroup() %>%
+   filter(!is.na(causal)) %>%
+  dplyr::rename(network_set = "group") %>%
+  mutate(group = cut(rank, breaks = c(0,5,10,20,50,100,200,1000))) %>%
+  count(network_set, group)
+
+
+rank_group <- rbind(network_based_rank, feature_based_rank) %>%
+  filter(n > 0)
+
+palettes <-  c(RColorBrewer::brewer.pal(6, "Greens"), RColorBrewer::brewer.pal(3, "Blues"))
+
+rank_group$network_set <- factor(rank_group$network_set, levels = c(unique(feature_based_rank$network_set), unique(network_based_rank$network_set)))
+
+p <- ggplot(rank_group, aes(x = network_set, y = n, fill = network_set)) + 
+ geom_col(position = "dodge") +
+  facet_grid(.~ group) +
+  scale_fill_manual(values = palettes) + #guides(col = FALSE) +
+  cowplot::theme_cowplot()
+
+p
+```
+
+```{r}
+palettes <-  c(RColorBrewer::brewer.pal(4, "Greens"), "#3182BD")
+
+p <- ggplot(rank_group %>% filter(network_set %in% selected_features, group %in% c("(0,5]", "(5,10]", "(10,20]")) %>%
+                                    mutate(network_set = factor(network_set, levels = selected_features, labels = selected_features_label)), aes(x = network_set, y = n, fill = network_set)) + 
+ geom_col(position = "dodge") +
+  facet_grid(.~ group) +
+  scale_fill_manual(values = palettes) + #guides(col = FALSE) +
+  cowplot::theme_cowplot() +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  xlab("")
 
 p
 ```

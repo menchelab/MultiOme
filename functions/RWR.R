@@ -41,7 +41,7 @@ RWR <- function(M, p_0, r=0.8 , prop=FALSE, scale = F) {
     # Check convergance
     D_tx = norm(p_tx-p_t)
     D_t = append(D_t, D_tx)
-    print (D_tx)
+    #print (D_tx)
    
      # convergence is taken if the values don't change, or change very minimally (ratio test)
     if(abs(D_t[i+2]-D_t[i+1])==0){

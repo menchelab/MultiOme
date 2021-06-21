@@ -1,5 +1,3 @@
-
-
 ## Patient specific RWR
 # Ize Buphamalai, CeMM
 # edited: 3 April 2021
@@ -19,6 +17,10 @@ library(igraph)
 result_folder = "../cache/output/Orphageneset_rare/"
 result_df = readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.RDS"))
 
+result_df_additional_net = readRDS("../cache/output/Orphageneset_rare_additionalNetworks/LCC_and_distance_calculation_results.RDS")
+
+result_df <- rbind(result_df,result_df_additional_net %>% filter(network == "coex_core"))
+
 ## from LCC_analysis_new: process the LCC
 result_df = process_LCC_result(result_df)
 
@@ -27,27 +29,16 @@ all_LCC_val_signif = result_df %>% dplyr::filter(correctedPval < 0.05) %>% dplyr
 
 ###############################################
 # read all edgelists for all significant networks
-network_dirs = "../data/network_edgelists/"
+network_dirs = "../data/network_edgelist_combn//"
 
 el_all = list()
 for(i in unique(result_df$network)){
-  el_all[[i]] = read_tsv(paste0(network_dirs, i,".tsv"), col_names = c("A","B"), skip = 1)
+  el_all[[i]] = read_tsv(paste0(network_dirs, i,".tsv"), col_names = c("A","B"), skip = 1, col_types = 'ss')
 }
 
 el_all = lapply(el_all, process_edgelist)
 
-
-############## 
-# laod patients HPO terms
-#patient_hpo_df <- read_csv("../data/variants_list/patient_hpo_terms.csv", col_names = c('Patient', "hpo_id", "hpo_label"), skip = 1) %>%
-#  mutate(hpo_id = str_trim(hpo_id, side = 'both'))
-
-
-#####
-# read patient gene
-#gene_list <- read_csv("../data/patient_gene_list.csv") 
-
-
+# 
 
 patient_annotated_df <- list()
 
@@ -55,9 +46,10 @@ patient_annotated_df <- list()
 # 1 all networks, 2 only significant networks to the disease group, 3 only ppi 
 
 
-for(network_set in c("all", "signif", "ppi")){
+for(network_set in c("all", "informedMultiPlex", "ppi")){
+  print(network_set)
   
-  if(network_set == "signif"){
+  if(network_set == "informedMultiPlex"){
     
     LCC_val_signif = all_LCC_val_signif %>% 
       dplyr::filter(name == "Rare genetic neurological disorder") %>% 
@@ -82,18 +74,23 @@ for(network_set in c("all", "signif", "ppi")){
   
   
   ranks = list()
-  for(patient_current in unique(patient_hpo_df$`Participant ID`)){
+  for(patient_current in unique(patient_hpo_df_all_cohort$`Experiment ID`)){
     print(patient_current)
     
     # select genes and weights for patient
-    seeds <- unlist(seed_genes$associated_genes[seed_genes$`Participant ID`==patient_current])
+    seeds <- unlist(seed_genes$associated_genes[seed_genes$`Experiment ID`==patient_current])
     seeds <- tibble(genes = seeds[seeds %in% gene_allnet]) %>% count(genes)
     
+    if(network_set == "informedMultiPlex"){
+      seed_weight <- seeds$n
+    } else{
+      seed_weight <- NULL
+    }
     
     ## perform retrieval
     ranks[[patient_current]] <- weighted_multiplex_propagation(
       seedset = seeds$genes, 
-      seedweight = seeds$n,     
+      seedweight = seed_weight,
       trueset = c(), 
       weighted_layer_df = LCC_val_signif,
       network_dirs = network_dirs, 

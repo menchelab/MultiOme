@@ -20,7 +20,7 @@ supraadjacency_compute = function(weighted_layer_df, el = NULL){
   
   # transitional matrix for each layer
   library(Matrix)
-  print("creating supra transitional matrix")
+ # print("creating supra transitional matrix")
   
   gene_allnet = get_allnodes(el)
   NLayer = length(el)
@@ -54,11 +54,11 @@ weighted_multiplex_propagation = function(seedset, seedweight = NULL, trueset, w
   }
   
   # report numbers from the input
-  print(paste0("Number of seed used: ", length(seedset)))
-  print(paste0("Number of true set: ", length(trueset)))
-  for(i in 1:nrow(weighted_layer_df)){
-    print(paste0(" network layer: ", i, ": ", weighted_layer_df[i,1]))
-  }
+  #print(sprintf("Number of seed used: %i, true set: %i", length(seedset), length(trueset)))
+
+ # for(i in 1:nrow(weighted_layer_df)){
+  #  print(paste0(" network layer: ", i, ": ", weighted_layer_df[i,1]))
+  #}
   
   
   if(is.null(gene_allnet)){
@@ -77,7 +77,7 @@ weighted_multiplex_propagation = function(seedset, seedweight = NULL, trueset, w
   # add seed to the computation
   #############
   
-  print("Initialising the propagation")
+  #print("Initialising the propagation")
   
   # create initial visiting probability: from seed
   p_0 = rep(0, length(gene_allnet))
@@ -101,7 +101,7 @@ weighted_multiplex_propagation = function(seedset, seedweight = NULL, trueset, w
     
   pos_nonseed = seq_along(gene_allnet)[!seed]
   
-  print("Performing the network-based propagation")
+ # print("Performing the network-based propagation")
   test_result = RWR(M = Stest,p_0 = p_0, r = 0.7)
   result_df = matrix(test_result, ncol = NLayer, byrow = F,
                      dimnames = list(gene_allnet, namesLayer)) %>% as.data.frame()
