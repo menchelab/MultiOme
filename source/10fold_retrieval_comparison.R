@@ -12,7 +12,7 @@ source("../functions/process_rank_network.R")
 
 # 1. Load disease network prior matrix ------------
 ## load the LCC results and prepare data for the original prior matrix
-result_folder = "../cache/output/Orphageneset_rare_CoExwithCore/"
+result_folder = "../cache/output/Orphageneset_rare/"
 result_df = readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.RDS"))
 
 
@@ -20,10 +20,10 @@ result_df = readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.
 result_df_additional_net = readRDS("../cache/output/Orphageneset_rare_additionalNetworks/LCC_and_distance_calculation_results.RDS")
 
 result_df_combn <- rbind(result_df, 
-                   result_df_additional_net %>% filter(network %in% c("PPI_HIPPIECurated" , "PPI_HIPPIELargeScale" ,"coex_core")))
+                         result_df_additional_net %>% filter(network %in% c("coex_core")))
 
 ## from LCC_analysis_new: process the LCC
-result_df_combn = process_LCC_result(result_df_combn)
+result_df_combn = process_LCC_result(result_df_combn, network_annotate = F)
 
 ### extract the most significant networks for all diseases
 all_LCC_val_signif = result_df_combn %>% dplyr::filter(correctedPval < 0.05) %>% dplyr::select(name, network, LCC.zscore)
