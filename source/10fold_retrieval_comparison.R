@@ -38,7 +38,9 @@ Orphanet_df = Orphanet_df$disgene_list
 # 3. Load edgelists ------------
 network_dirs = "../data/network_edgelist_combn/"
 
-all_networks = all_LCC_val_signif %>% pull(network) %>% unique
+#all_networks = all_LCC_val_signif %>% pull(network) %>% unique
+all_networks = str_remove(list.files(network_dirs), pattern = ".tsv")
+
 
 el_all = list()
 for(i in all_networks){
@@ -109,6 +111,53 @@ rank_networks[["Largescale_signif_weighted"]] <- process_rank_network(all_diseas
                                                              disease_specific = T, 
                                                              to_exclude = c(upper_layers, "ppi", "PPI_HIPPIECurated"))
 
+
+## 7) scale_specific
+# 7.1 - co-essential alone
+rank_networks[["co-essential"]] <- process_rank_network(network_set = "co-essential", 
+                                                        all_diseases = all_diseases,
+                                                        el_all = el_all, 
+                                                        weighted = F, disease_specific = F, to_exclude = NULL)
+
+# 7.2 - reactome alone
+rank_networks[["reactome_copathway"]] <- process_rank_network(network_set = "reactome_copathway", 
+                                                        all_diseases = all_diseases,
+                                                        el_all = el_all, 
+                                                        weighted = F, disease_specific = F, to_exclude = NULL)
+
+# 7.3 - phenotype alone
+phenotype_weight_df <- tibble(network = c("HP","MP"), LCC.zscore = 1)
+
+rank_networks[["phenotypes"]] <- process_rank_network(network_weight_df_custom=phenotype_weight_df,
+                                                      all_diseases = all_diseases,
+                                                      el_all = el_all, 
+                                                      weighted = F, 
+                                                      disease_specific = F, 
+                                                      to_exclude = NULL)
+
+# 7.4 - co-expression alone - only consider the significant ones (tissues)
+rank_networks[["coex_Signif"]] <- process_rank_network(all_diseases = all_diseases,
+                                                        el_all = el_all, 
+                                                        weighted = T, 
+                                                        disease_specific = T, 
+                                                        to_exclude = names(el_all)[!grepl("coex", names(el_all))])
+
+# 7.5 - GO networks
+go_weight_df <- tibble(network = c("GOBP","GOMF"), LCC.zscore = 1)
+
+rank_networks[["GO"]] <-  process_rank_network(network_weight_df_custom=go_weight_df,
+                                               all_diseases = all_diseases,
+                                               el_all = el_all, 
+                                               weighted = F, 
+                                               disease_specific = F, 
+                                               to_exclude = NULL)
+
+# 7.6 - core co-expression
+rank_networks[["coex_core"]] <- process_rank_network(network_set = "coex_core", 
+                                                              all_diseases = all_diseases,
+                                                              el_all = el_all, 
+                                                              weighted = F,disease_specific = F, to_exclude = NULL)
+
 # Process fold results ###########################
 
 rank_networks_processed <- lapply(rank_networks, function(x) 
@@ -116,80 +165,19 @@ rank_networks_processed <- lapply(rank_networks, function(x)
     lapply(1:10, function(iter) 
       df %>% filter(fold == iter) %>% select(trueset, rank))))
 
-#rank_df_all_folds <- lapply(rank_df_all_folds, function(x) lapply(x, function(df) df[, c("trueset", "RankArithmP")]))
-
-# Since using one network there is one ranking column
-#rank_df_all_folds_only_PPI <- lapply(rank_df_all_folds_only_PPI, function(x) lapply(x, function(df) df[, c("trueset", "rank")]))
-
-#rank_df_all_folds_allnets_used <- lapply(rank_df_all_folds_allnets, function(x) lapply(x, function(df) df[, c("trueset", "RankArithmP")]))
-
 saveRDS(rank_networks_processed, "../cache/rank_10foldCV_revised_26_diseases.RDS")
-
-############
-# Process the AUC values
-# function to compute AUC from rank
-
-auc_output<-function(rank_df){
-  #' @input rank_df: a two column data frame, with label and prediction respectively
-  rank_label<-lapply(rank_df, function(x) x[,1])
-  rank_prediction<-lapply(rank_df, function(x) -x[,2])
-  
-  out <- cvAUC(rank_prediction, rank_label)
-  return(out)
-}
 
 
 ## compute AUC from the rank through CVAUC - combining cross validation results
-
-#aucvals <- list()
-#for(i in names(rank_networks_processed)){
-#      aucvals[[i]] <- lapply(rank_networks_processed[[i]], function(x) 
-#        lapply(1:10, function(iter) 
-#          auc_output(x %>% filter(fold == iter) %>% select(-fold))))
-#}
-
-
-aucvals <- lapply(rank_networks_processed,  function(x) lapply(x, auc_output))
-#aucvals <- lapply(rank_networks_processed, function(x) lapply(x, auc_output))
-#aucvals_PPI <-lapply(rank_df_all_folds_only_PPI, auc_output)
-#aucvals_all <-lapply(rank_df_all_folds_allnets_used, auc_output)
-
-#all_diseases <- names(aucvals_all)
+aucvals <- pbapply::pblapply(rank_networks_processed,  function(x) lapply(x, auc_output))
 
 
 ######
-# process auc data into data frame for post analysis
-# AUC plot for all diseases
-auc_to_df <- function(auc_object, label = NULL){
-  AUC_folds<-lapply(auc_object, function(x) x$fold.AUC)
-  
-  AUC_folds<- reshape2::melt(AUC_folds)
-  colnames(AUC_folds)<-c("AUC", "name")
-  
-  AUC_folds<-AUC_folds %>% mutate(name=fct_reorder(name, AUC))
-  
-  if(!is.null(label)){
-    AUC_folds$label <- label
-  }
-  return(AUC_folds)
-}
-
-
-### AUC plot for all diseases and all methods
-#AUC_folds_signif <- auc_to_df(aucvals_signif, label = "significant networks")
-#AUC_folds_allnets <- auc_to_df(aucvals_all, label = "all networks")
-#AUC_folds_PPI <- auc_to_df(aucvals_PPI, label = "PPI only")
-
 AUC_folds_each <- lapply(1:length(aucvals), function(x) auc_to_df(aucvals[[x]], label = names(aucvals)[x]))
 
 AUC_folds <- bind_rows(AUC_folds_each)
 
+saveRDS(AUC_folds, "../cache/fold_cv_processed_results_revision.RDS")
 
-# compute median and 25% and 75% quantile
-AUC_folds_summary <- AUC_folds %>% 
-  group_by(name, label) %>% 
-  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75)) %>%
-  mutate(name_short = factor(name, levels = levels(name), labels = short_names))
 
-saveRDS(AUC_folds_summary, "../cache/fold_cv_processed_results_revision.RDS")
 

@@ -1,0 +1,179 @@
+# Modularity as quantification of pathobiological relevance
+
+
+```{r load data}
+pacman::p_load(patchwork, cowplot, ggstatsplot)
+knitr::opts_chunk$set(echo=FALSE)
+
+AUC_folds_file <- "../cache/fold_cv_processed_results_revision.RDS"
+
+#if(!file.exists(AUC_folds_file)){
+#  source("../source/process_fold_cv_results.R")
+#}
+
+AUC_folds_summary <- readRDS("../cache/fold_cv_processed_results.RDS") %>% filter(label!="all networks")
+
+
+# compute median and 25% and 75% quantile
+AUC_folds_revision <- readRDS("../cache/fold_cv_processed_results_revision.RDS") 
+  
+AUC_folds_revision <- AUC_folds_revision %>% 
+  group_by(name, label) %>% 
+  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75)) %>%
+  mutate(name_short = factor(name, levels = levels(name), labels = short_names))
+
+
+AUC_folds_summary_plot <- rbind(AUC_folds_summary, AUC_folds_revision)
+
+# reorder based on performance
+order_performance <- AUC_folds_summary_plot %>% filter(label == "all") %>% arrange(mean) %>% pull(name)
+AUC_folds_summary_plot <- AUC_folds_summary_plot %>%
+  mutate(short_names = factor(name, levels = order_performance),
+         label = factor(label, levels = c("all", "Largescale_signif", "significant networks", rev(c("PPI only", "PPI_curated", "PPI_largescale"))), labels = c("All networks", "Disease significant (large scale)", "Disease significant ", rev(c("PPI", "PPI (curated)", "PPI (largescale)")))))
+
+library(RColorBrewer)
+
+palettes <- c(brewer.pal(3, "Blues"), brewer.pal(3, "Greens"))  
+```
+
+## ROC-AUC comparison among all diseases and and network selection (Fig. 5b)
+```{r}
+p <- ggplot(AUC_folds_summary_plot,aes(x=short_names, fill = label, group = label)) +
+   geom_ribbon(aes(ymin = Q25, ymax = Q75), alpha = 0.25) +
+  geom_line(aes(y = med, col = label), linetype = 2) +
+  coord_flip() + xlab("disease") + ylab("fold AUC") + theme_minimal_hgrid() + theme(legend.position = "bottom") +
+  ggtitle("ROC-AUC comparison", subtitle = "area spans 25, 50 and 75% quantile") +
+  #scale_fill_brewer(type = "qual") + scale_color_brewer(type = "qual")
+  scale_fill_manual(values=palettes) + scale_color_manual(values=palettes)
+#ggsave("../Figs/cvROC/AUC_folds_comparison_short_names.pdf", p, width = 6, height = 6)
+
+p
+```
+
+```{r}
+AUC_folds_summary_plot <- AUC_folds_summary_plot %>%
+  mutate(network_group = ifelse(grepl("ppi", label, ignore.case = T), "PPI only", "Multiplex"))
+
+         
+p <- ggplot(AUC_folds_summary_plot,aes(x=short_names, fill = label, group = label)) +
+   geom_ribbon(aes(ymin = Q25, ymax = Q75), alpha = 0.25) +
+  geom_line(aes(y = med, col = label), linetype = 2) +
+  facet_grid(.~ network_group) +
+  coord_flip() + xlab("disease") + ylab("fold AUC") + theme_minimal_hgrid() + theme(legend.position = "bottom") +
+  ggtitle("ROC-AUC comparison", subtitle = "area spans 25, 50 and 75% quantile") +
+  #scale_fill_brewer(type = "qual") + scale_color_brewer(type = "qual")
+  scale_fill_manual(values=palettes) + scale_color_manual(values=palettes)
+#ggsave("../Figs/cvROC/AUC_folds_comparison_short_names.pdf", p, width = 6, height = 6)
+
+p
+```
+
+
+## Corresponding p-value based on statistical test for avg ROC curve (Fig. 5c)
+
+```{r}
+AUC_folds_summary_plot <- tibble(label = AUC_folds_summary$label, 
+                                 AUC = AUC_folds_summary$mean)
+
+plot_df = tibble(x = factor(AUC_folds_summary$label,  
+                            levels = c(  "PPI only" , "all networks"  , "significant networks"),
+                            labels = c(  "PPI only" , "All networks"  , "Significant networks")), y = AUC_folds_summary$mean)
+
+barstatplot <- ggstatsplot::ggwithinstats(data = plot_df,
+              x = x, y = y,type = "np") + 
+  xlab("Method") + ylab("AUC") +
+  scale_color_manual(values = palettes) #+ylim(0.6, 1)
+  
+
+#ggsave(plot = barstatplot, filename = "../Figs/10fold_cv_method_compared_boxplot.pdf", width = 6*0.8, height = 4*0.8)
+
+barstatplot
+```
+
+
+
+## relationship between the disease, number of signifiant networks, and number of genes (Fig. 5d)
+
+
+```{r}
+## load the LCC results 
+result_folder<-"../cache/output/Orphageneset_rare/"
+result_df<-readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.RDS"))
+
+source("../functions/process_LCC_result.R")
+result_df<-process_LCC_result(result_df, network_annotate=F)
+
+## count number of networks, only coex
+
+n_signif_df<-result_df %>% dplyr::filter(LCC.signif != "none", grepl("coex", network)) %>% group_by(name)  %>% count(name)
+
+## load the gene sets
+source("../functions/readdata_functions.R")
+Orphanet_df<-process_disease_genes_data("../data/table_disease_gene_assoc_orphanet_genetic.tsv", min_gene=20, max_gene=2000)
+Orphanet_n_gene_df<-Orphanet_df$disgene_df
+
+# retrieve median values
+AUC_folds_perf_compare <- AUC_folds_summary %>% 
+  pivot_wider(., id_cols = name, names_from = label, values_from = med) %>%
+  mutate(dif = `significant networks` - `all networks`) %>%
+  left_join(x=., y = n_signif_df) %>%
+  left_join(x=., y = Orphanet_n_gene_df[,c("name","N")])
+
+
+
+AUC_allnets_median <- AUC_folds_summary %>% 
+  dplyr::select(-Q25, -Q75, -name_short) %>%
+  dplyr::filter(label == 'significant networks') %>%
+  left_join(x=., y = n_signif_df) %>%
+  left_join(x=., y = Orphanet_n_gene_df[,c("name","N")])
+
+
+p1 <- ggplot(AUC_folds_perf_compare %>% mutate(label = ifelse(dif< 0, name,"")), aes(x = n, y = dif)) + 
+  geom_point(col = "grey40") + 
+  theme_cowplot() + guides(size = F) + geom_hline(yintercept = 0, linetype = "dotted", col = "grey20") + 
+ # stat_summary(fun.data= mean_cl_normal) + 
+  geom_smooth(method='lm', se = F) +
+  xlab("# Significant tissues") + ylab(expression("Performance diff. ("*Delta*"AUC)"))
+
+p2 <- ggplot(AUC_allnets_median, aes(x = N, y = med)) + geom_point(col = "grey40") + theme_cowplot() + 
+  guides(size = F) + xlab("# Associated genes") + ylab("Median AUC") + 
+  scale_x_log10() +
+   geom_smooth(method='lm', se = F)   
+
+
+
+p <- p1 + p2
+
+#ggsave(filename = "../Figs/scatter_AUC_vs_ntissues.pdf",plot = p,  height = 3, width = 6)
+
+p
+```
+### Corresponding statistical parameters on the left plot (Performance difference vs #tissue):
+
+```{r}
+cor.test(AUC_folds_perf_compare$dif,AUC_folds_perf_compare$n, method = "spearman")
+```
+
+### Corresponding statistical parameters on the right plot (Performance vs #genes):
+```{r}
+cor.test(AUC_allnets_median$N, AUC_allnets_median$med, method = "spearman")
+```
+
+## Performance difference: using relevant networks vs all networks (Suppl. Fig. 5b)
+
+
+```{r}
+p <- AUC_folds_perf_compare %>%
+  left_join(., distinct(AUC_folds_summary, name, name_short), by="name") %>%
+  ungroup %>% 
+  mutate(name_short = fct_reorder(name_short, n)) %>%
+  ggplot(., aes(x = name_short, y = n, fill=dif)) + geom_col() + theme_minimal() + coord_flip() + scale_fill_gradient2() + ylab("# Significant tissues") + xlab("") + labs(fill = "")+ ggtitle("Performance difference", subtitle = "Selected networks vs all networks")
+
+#ggsave("../Figs/barchart_n_tissues_vs_performance_difference.pdf", height = 4, width = 6)
+
+p
+```
+
+
+
+

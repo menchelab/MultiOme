@@ -8,27 +8,33 @@ source("../functions/RWR_get_allnodes.R")
 source("../functions/RWR_transitional_matrix.R")
 source("../functions//RWR.R")
 
-process_rank_network <- function(network_weight_df_custom = NULL, network_set=NULL, all_diseases, weighted = F, el_all, disease_specific = F, to_exclude = NULL){
-  
-  el = NULL 
-  if(!disease_specific){
-    # if a aprticular network, all a set of networks are used, unspecific to the disease group, el and supraadj are computed before passing into disease loop.
-    
-    if(is.null(network_weight_df_custom)){
-      LCC_val_signif = all_LCC_val_signif %>%
-        dplyr::filter(name %in% all_diseases, network %in% network_set, !network %in% to_exclude) %>%
-        distinct(network)
+process_rank_network <- function(network_weight_df_custom = NULL, network_set=NULL, all_diseases, weighted = F, el_all, computeOnlyIfSignif = T, disease_specific = F, to_exclude = NULL){
+  #' @computeOnlyIfSignif: the for a given disease, the network will be included if it was detected to be significant from the prior matric (LCC_vall_signif), if FALSE, this will be overridden and the retrieval performance will be computed for the disease regardless of whether the network was significant
+  #if(computeOnlyIfSignif){
+    if(!disease_specific){
+      # if a aprticular network, all a set of networks are used, unspecific to the disease group, el and supraadj are computed before passing into disease loop.
       
-      LCC_val_signif$LCC.zscore = 1
-    } else{
-      LCC_val_signif <- network_weight_df_custom
+      if(is.null(network_weight_df_custom)){
+        LCC_val_signif = all_LCC_val_signif %>%
+          dplyr::filter(name %in% all_diseases, network %in% network_set, !network %in% to_exclude) %>%
+          distinct(network)
+        
+        LCC_val_signif$LCC.zscore = 1
+      } else{
+        LCC_val_signif <- network_weight_df_custom
+      }
+      
+      el = el_all[LCC_val_signif$network]
+      
+      gene_allnet = get_allnodes(el)
+      supraadj = supraadjacency_compute(LCC_val_signif, el = el)
     }
-    
-    el = el_all[LCC_val_signif$network]
-    
-    gene_allnet = get_allnodes(el)
-    supraadj = supraadjacency_compute(LCC_val_signif, el = el)
-  }
+ # } #else{
+    #el = network_specific_prop[["el"]]
+    #gene_allnet = get_allnodes(el)
+    #LCC_val_signif <- tibble(network = names(el), LCC.zscore = 1)
+    #supraadj = supraadjacency_compute(LCC_val_signif, el = el)
+  #}
   
   
   rank_df_all_folds = list()
@@ -51,7 +57,6 @@ process_rank_network <- function(network_weight_df_custom = NULL, network_set=NU
       el = el_all[LCC_val_signif$network]
       gene_allnet = get_allnodes(el)
       supraadj = supraadjacency_compute(LCC_val_signif, el = el)
-      
     }
     
     
@@ -96,3 +101,38 @@ process_rank_network <- function(network_weight_df_custom = NULL, network_set=NU
   
   return(rank_df_all_folds)
 }
+
+
+############
+# Process the AUC values
+# function to compute AUC from rank
+auc_output<-function(rank_df){
+  #' @input rank_df: a two column data frame, with label and prediction respectively
+  rank_label<-lapply(rank_df, function(x) x[,1])
+  
+  # check if 
+  if( all(sapply(rank_label, function(x) any(x)))){
+    rank_prediction<-lapply(rank_df, function(x) -x[,2])
+    
+    out <- cvAUC(rank_prediction, rank_label)
+    return(out)
+  } 
+}
+
+
+# process auc data into data frame for post analysis
+# AUC plot for all diseases
+auc_to_df <- function(auc_object, label = NULL){
+  AUC_folds<-lapply(auc_object[!sapply(auc_object, is.null)], function(x) x$fold.AUC)
+  
+  AUC_folds<- reshape2::melt(AUC_folds)
+  colnames(AUC_folds)<-c("AUC", "name")
+  
+  AUC_folds<-AUC_folds %>% mutate(name=fct_reorder(name, AUC))
+  
+  if(!is.null(label)){
+    AUC_folds$label <- label
+  }
+  return(AUC_folds)
+}
+
