@@ -44,3 +44,4 @@ coex_OVR	Co-expression	Co-expression	Ovary	GTEx
 coex_ATT	Co-expression	Co-expression	Artery tibial	GTEx
 coex_KDN	Co-expression	Co-expression	Kidney cortex	GTEx
 coex_PIT	Co-expression	Co-expression	Pituitary	GTEx
+coex_core	Co-expression	Co-expression	Core module	GTEx

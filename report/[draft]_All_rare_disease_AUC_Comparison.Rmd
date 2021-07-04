@@ -5,7 +5,7 @@
 pacman::p_load(patchwork, cowplot, ggstatsplot)
 knitr::opts_chunk$set(echo=FALSE)
 
-AUC_folds_file <- "../cache/fold_cv_processed_results_revision.RDS"
+#AUC_folds_file <- "../cache/fold_cv_processed_results_revision.RDS"
 
 #if(!file.exists(AUC_folds_file)){
 #  source("../source/process_fold_cv_results.R")
@@ -19,14 +19,15 @@ AUC_folds_revision <- readRDS("../cache/fold_cv_processed_results_revision.RDS")
   
 AUC_folds_revision <- AUC_folds_revision %>% 
   group_by(name, label) %>% 
-  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75)) %>%
-  mutate(name_short = factor(name, levels = levels(name), labels = short_names))
+  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75)) #%>%
+#  mutate(name_short = factor(name, levels = levels(name), labels = short_names))
 
 
-AUC_folds_summary_plot <- rbind(AUC_folds_summary, AUC_folds_revision)
+AUC_folds_summary_plot <- rbind(AUC_folds_summary %>% select(-name_short), AUC_folds_revision)
 
 # reorder based on performance
 order_performance <- AUC_folds_summary_plot %>% filter(label == "all") %>% arrange(mean) %>% pull(name)
+
 AUC_folds_summary_plot <- AUC_folds_summary_plot %>%
   mutate(short_names = factor(name, levels = order_performance),
          label = factor(label, levels = c("all", "Largescale_signif", "significant networks", rev(c("PPI only", "PPI_curated", "PPI_largescale"))), labels = c("All networks", "Disease significant (large scale)", "Disease significant ", rev(c("PPI", "PPI (curated)", "PPI (largescale)")))))
@@ -167,7 +168,8 @@ p <- AUC_folds_perf_compare %>%
   left_join(., distinct(AUC_folds_summary, name, name_short), by="name") %>%
   ungroup %>% 
   mutate(name_short = fct_reorder(name_short, n)) %>%
-  ggplot(., aes(x = name_short, y = n, fill=dif)) + geom_col() + theme_minimal() + coord_flip() + scale_fill_gradient2() + ylab("# Significant tissues") + xlab("") + labs(fill = "")+ ggtitle("Performance difference", subtitle = "Selected networks vs all networks")
+  ggplot(., aes(x = name_short, y = n, fill=dif)) + geom_col() + theme_minimal() + coord_flip() + scale_fill_gradient2() + ylab("# Significant tissues") + xlab("") + 
+  labs(fill = "")+ ggtitle("Performance difference", subtitle = "Selected networks vs all networks")
 
 #ggsave("../Figs/barchart_n_tissues_vs_performance_difference.pdf", height = 4, width = 6)
 
@@ -175,5 +177,192 @@ p
 ```
 
 
+# Add results when excluding layers
+
+```{r compare performance upon network layer removal}
+AUC_folds_exclude <- readRDS("../cache/fold_cv_processed_results_revision_excludes.RDS") %>%
+  rbind(., readRDS("../cache/fold_cv_processed_results_revision_Signifs.RDS") )
+
+
+AUC_folds_exclude <- AUC_folds_exclude %>% 
+  group_by(name, label) %>% 
+  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75)) #%>%
+
+#AUC_folds_exclude_plot <- rbind(AUC_folds_exclude,
+#                                AUC_folds_revision %>% dplyr::filter(label %in% c("signif_withCoexCore", "Largescale_signif_weighted", "Largescale_signif", "coex_Signif", "coex_core")))
+
+AUC_folds_exclude_plot <- rbind(AUC_folds_exclude,
+                                AUC_folds_revision)
+
+AUC_folds_exclude_plot <- AUC_folds_exclude_plot %>%
+  mutate(excluded_layer = str_remove(label, "Signif_without"),
+         type = ifelse(str_starts(label, "Signif_"), "Significant networks" , ifelse(grepl("ppi", label,ignore.case = T) , "PPIs", "Others"))
+         ) 
+
+
+AUC_folds_Signifs <- AUC_folds_exclude_plot %>% 
+  filter(type == "Significant networks") 
+
+order_network <- AUC_folds_Signifs %>% group_by(excluded_layer) %>% summarise(median = median(med)) %>% arrange(median) %>% pull(excluded_layer) %>% as.character() %>% rev()
+
+
+AUC_folds_Signifs <- AUC_folds_Signifs %>%
+  mutate(excluded_layer = fct_relevel(excluded_layer, order_network),
+         excluded_layer = recode_factor(excluded_layer, "All Significant layers" = "Signif_all"),
+         excluded_layer = fct_relevel(excluded_layer, "All Significant layers"),
+        excluded_layer = fct_relevel(excluded_layer, "LargeScaleNet", after = Inf))
+  
+
+order_network <- AUC_folds_exclude_plot %>% group_by(excluded_layer) %>% summarise(median = median(med)) %>% arrange(median) %>% pull(excluded_layer)
+
+AUC_folds_exclude_plot$excluded_layer <- factor(AUC_folds_exclude_plot$excluded_layer, levels = order_network)
+
+ggplot(AUC_folds_Signifs, aes(x=excluded_layer, y=med)) + geom_boxplot() + theme_cowplot() 
+
+
+p_compare_all_nets <- ggwithinstats(
+  data = AUC_folds_Signifs %>% filter(!excluded_layer %in% c("CoEx", "CoEssential", "PPI")) %>% ungroup,
+  x = excluded_layer,
+  p.adjust.method = "BH",
+  y = med,
+ title = "AUC values upon removing layers",
+#  caption = "Data source: `WRS2` R package",
+  ggtheme = theme_cowplot(), 
+  xlab = "Excluded layer",
+  ylab = "10-fold CV median AUC", 
+#ggplot.component = list(scale_color_brewer(palette = "Blues"), scale_fill_brewer(palette = "Blues")),
+type = "non-parametric"#, 
+#ggplot.component = c(col = "grey")
+#  ggtheme = ggthemes::theme_fivethirtyeight()
+)
+
+
+#ggsave("../Figs/compare_CuratedNetwork_removal_AUC.pdf", p_compare_all_nets, height = 4, width =6, scale = 1.125)
+
+p_compare_all_nets
+```
+
+```{r compare PPI}
+AUC_folds_PPI <-  rbind(AUC_folds_exclude_plot %>% filter(type == "PPIs") %>% select(colnames(.)[1:6] ),
+                        AUC_folds_summary[1:6] %>% filter(label == "PPI only")) %>% ungroup %>%
+  mutate(label = factor(label, levels = c("PPI only", "PPI_curated", "PPI_largescale"), 
+                        labels = c("Full", "Curated", "Large scale")),
+         label_plot = (label))
+
+
+
+p_compare_PPI <- ggwithinstats(
+  data = AUC_folds_PPI,# %>% filter(!excluded_layer %in% c("CoEx", "CoEssential")) %>% ungroup,
+  x = label_plot,
+  y = med,
+  p.adjust.method = "BH",
+  title = "AUC values upon removing layers",
+#  caption = "Data source: `WRS2` R package",
+  ggtheme = theme_cowplot(), 
+  xlab = "PPI set",
+  ylab = "10-fold CV median AUC", 
+#ggplot.component = list(scale_color_brewer(palette = "Blues"), scale_fill_brewer(palette = "Blues")),
+type = "non-parametric"#, 
+#ggplot.component = c(col = "grey")
+#  ggtheme = ggthemes::theme_fivethirtyeight()
+)
+
+
+#ggsave("../Figs/compare_PPI_network_removal_AUC.pdf", p_compare_PPI, height = 4, width =3, scale = 1.125)
+
+p_compare_PPI
+```
+
+## Compare single most significant layer, signif, and all layers
+
+```{r}
+# Single Signif Layer
+AUC_folds_singleSignif <- readRDS("../cache/fold_cv_processed_results_revision_singleMostSignifLayer.RDS")
+
+#AUC_folds_singleSignif <- AUC_folds_singleSignif %>% 
+#  group_by(name, label) %>% 
+#  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75))
+  
+network_used <- AUC_folds_singleSignif %>% select(name, label) %>% distinct()
+
+AUC_folds_singleSignif$label = "SingleMostSignif"
+
+
+# Significant layers (update those with coex)
+
+# compute median and 25% and 75% quantile
+AUC_folds_signif_updated <- readRDS("../cache/fold_cv_processed_results_revision.RDS") %>% filter(label %in% c("all", "signif_withCoexCore")) %>%
+  mutate(label = factor(label,levels = c("all", "signif_withCoexCore"), labels = c("All layers", "Significant layers")))
+
+disease_withUpdatedData <- AUC_folds_signif_updated %>% filter(label == "Significant layers") %>% pull(name) %>% unique
+  
+# the signif network inly computed for those that coex_core does not change   
+AUC_folds_signif_orig <- readRDS("../cache/fold_cv_processed_results.RDS") %>% filter((label=="significant networks" & !name %in% disease_withUpdatedData) | label == "PPI only") %>%
+  mutate(label = factor(label, levels = c("significant networks", "PPI only"), labels = c("Significant layers", "PPI"))) %>% select(-name_short)
+
+
+AUC_folds_summary_updated <- rbind(AUC_folds_signif_updated, AUC_folds_singleSignif) %>% 
+  group_by(name, label) %>% 
+  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75)) #%>%
+#  mutate(name_short = factor(name, levels = levels(name), labels = short_names))
+
+AUC_folds_summary_updated <- rbind(AUC_folds_summary_updated,AUC_folds_signif_orig)
+
+# reorder based on performance
+order_performance <- AUC_folds_summary_updated %>% filter(label == "Significant layers") %>% arrange(mean) %>% pull(name)
+
+
+AUC_folds_summary_updated_plot <- AUC_folds_summary_updated %>%
+  mutate(name = factor(name, levels = order_performance),
+         name = fct_recode(name, `Rare genetic gynecological diseases`="Rare genetic gynecological and obstetrical diseases", 
+                           `Rare genetic developmental defect..`="Rare genetic developmental defect during embryogenesis",
+                           `Rare genetic rheumatologic disease`="Rare genetic systemic or rheumatologic disease"))
+
+
+palettes <- c('#66c2a5','#8da0cb',"#fec44f" , '#fc8d62')
+
+p <- ggplot(AUC_folds_summary_updated_plot,aes(x=name, fill = label, group = label)) +
+   geom_ribbon(aes(ymin = Q25, ymax = Q75), alpha = 0.25) +
+  geom_line(aes(y = med, col = label), linetype = 2) +
+  coord_flip() + xlab("disease") + ylab("fold AUC") + theme_minimal_hgrid() + theme(legend.position = "bottom") +
+  ggtitle("ROC-AUC comparison", subtitle = "area spans 25, 50 and 75% quantile") +
+  #scale_fill_brewer(type = "qual") + scale_color_brewer(type = "qual")
+  scale_fill_manual(values=palettes) + scale_color_manual(values=palettes)
+
+#ggsave("../Figs/AUC_folds_comparison_short_names_updated.pdf", p, width = 6, height = 6)
+
+p
+```
+## The equivalent boxplot
+
+```{r}
+AUC_folds_summary_updated_plot2 <- AUC_folds_summary_updated_plot %>%
+  mutate(label_plot = fct_recode(label, `Single most\n relevant layer`="SingleMostSignif"),
+         label_plot = fct_relevel(label_plot, "All layers", after = 1))
+
+palettes2 <- c('#8da0cb','#66c2a5',"#fec44f" , '#fc8d62')
+
+p_compare_main <- ggwithinstats(
+  data = AUC_folds_summary_updated_plot2,# %>% filter(!excluded_layer %in% c("CoEx", "CoEssential")) %>% ungroup,
+  x = label_plot,
+  y = med,
+  p.adjust.method = "fdr",
+  #title = "AUC values",
+#  caption = "Data source: `WRS2` R package",
+  ggtheme = theme_cowplot(), 
+  xlab = "Network layers",
+sample.size.label = F,
+pairwise.display = "significant",
+  ylab = "AUC", 
+#ggplot.component = list(scale_color_brewer(palette = "Blues"), scale_fill_brewer(palette = "Blues")),
+type = "non-parametric"#, 
+#ggplot.component = c(col = "grey")
+#  ggtheme = ggthemes::theme_fivethirtyeight()
+) + scale_color_manual(values = palettes2)
+
+ggsave(plot = p_compare_main, filename = "../Figs/10fold_cv_method_compared_boxplot_updated.pdf", width = 6.5, height = 4, scale = 0.9)
+
+p_compare_main
+```
 
 

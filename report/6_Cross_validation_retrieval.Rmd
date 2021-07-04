@@ -1,5 +1,6 @@
 # Modularity as quantification of pathobiological relevance
 
+Note: this was the old version and the indexed one sohuld be replaced by the new one.
 
 ```{r load data}
 pacman::p_load(patchwork, cowplot, ggstatsplot)
@@ -56,40 +57,40 @@ barstatplot
 
 ```{r}
 ## load the LCC results 
-result_folder<-"../cache/output/Orphageneset_rare/"
-result_df<-readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.RDS"))
-
-source("../functions/process_LCC_result.R")
-result_df<-process_LCC_result(result_df, network_annotate=F)
-
+source("../source/cache_all_networks_and_disease_genes.R")
 ## count number of networks, only coex
 
-n_signif_df<-result_df %>% dplyr::filter(LCC.signif != "none", grepl("coex", network)) %>% group_by(name)  %>% count(name)
+N_signif_net = processed_result_df_plot %>% 
+  filter(type=="Co-expression") %>%
+  count(name, name_short, name = "significant_tissues")
+
 
 ## load the gene sets
-source("../functions/readdata_functions.R")
-Orphanet_df<-process_disease_genes_data("../data/table_disease_gene_assoc_orphanet_genetic.tsv", min_gene=20, max_gene=2000)
-Orphanet_n_gene_df<-Orphanet_df$disgene_df
+Orphanet_df <-rare_genetic_diseases_genes$disgene_df %>% select(name, N)
+
+Orphanet_df <- left_join(Orphanet_df, N_signif_net)
 
 # retrieve median values
-AUC_folds_perf_compare <- AUC_folds_summary %>% 
+AUC_folds_perf_compare <- AUC_folds_summary_updated_plot %>% 
   pivot_wider(., id_cols = name, names_from = label, values_from = med) %>%
-  mutate(dif = `significant networks` - `all networks`) %>%
-  left_join(x=., y = n_signif_df) %>%
-  left_join(x=., y = Orphanet_n_gene_df[,c("name","N")])
+  mutate(dif = `Significant layers` - `All layers`) %>%
+  rename(name_short = "name") %>%
+  left_join(x=., y = Orphanet_df) #, by = c(name = "name_short"))
+
+AUC_allnets_median <- AUC_folds_summary_updated_plot %>% 
+    rename(name_short = "name") %>%
+  dplyr::select(-Q25, -Q75) %>%
+  dplyr::filter(label == 'Significant layers') %>%
+  left_join(x=., y = Orphanet_df)
 
 
-
-AUC_allnets_median <- AUC_folds_summary %>% 
-  dplyr::select(-Q25, -Q75, -name_short) %>%
-  dplyr::filter(label == 'significant networks') %>%
-  left_join(x=., y = n_signif_df) %>%
-  left_join(x=., y = Orphanet_n_gene_df[,c("name","N")])
-
-
-p1 <- ggplot(AUC_folds_perf_compare %>% mutate(label = ifelse(dif< 0, name,"")), aes(x = n, y = dif)) + 
+p1 <- ggplot(AUC_folds_perf_compare %>%
+               ungroup %>%
+               mutate(label = ifelse(dif< 0, name_short,""))
+             , aes(x = significant_tissues, y = dif)) + 
   geom_point(col = "grey40") + 
-  theme_cowplot() + guides(size = F) + geom_hline(yintercept = 0, linetype = "dotted", col = "grey20") + 
+  theme_cowplot() + guides(size = F) + 
+  geom_hline(yintercept = 0, linetype = "dotted", col = "grey20") + 
  # stat_summary(fun.data= mean_cl_normal) + 
   geom_smooth(method='lm', se = F) +
   xlab("# Significant tissues") + ylab(expression("Performance diff. ("*Delta*"AUC)"))
@@ -103,14 +104,14 @@ p2 <- ggplot(AUC_allnets_median, aes(x = N, y = med)) + geom_point(col = "grey40
 
 p <- p1 + p2
 
-#ggsave(filename = "../Figs/scatter_AUC_vs_ntissues.pdf",plot = p,  height = 3, width = 6)
+#ggsave(filename = "../Figs/scatter_AUC_vs_ntissues_updated.pdf",plot = p,  height = 3, width = 6)
 
 p
 ```
 ### Corresponding statistical parameters on the left plot (Performance difference vs #tissue):
 
 ```{r}
-cor.test(AUC_folds_perf_compare$dif,AUC_folds_perf_compare$n, method = "spearman")
+cor.test(AUC_folds_perf_compare$dif,AUC_folds_perf_compare$significant_tissues, method = "spearman")
 ```
 
 ### Corresponding statistical parameters on the right plot (Performance vs #genes):
@@ -123,10 +124,12 @@ cor.test(AUC_allnets_median$N, AUC_allnets_median$med, method = "spearman")
 
 ```{r}
 p <- AUC_folds_perf_compare %>%
-  left_join(., distinct(AUC_folds_summary, name, name_short), by="name") %>%
+  left_join(., distinct(AUC_folds_summary, name) %>% rename(name_short = "name"), by="name_short") %>%
   ungroup %>% 
-  mutate(name_short = fct_reorder(name_short, n)) %>%
-  ggplot(., aes(x = name_short, y = n, fill=dif)) + geom_col() + theme_minimal() + coord_flip() + scale_fill_gradient2() + ylab("# Significant tissues") + xlab("") + labs(fill = "")+ ggtitle("Performance difference", subtitle = "Selected networks vs all networks")
+  mutate(name_short = fct_reorder(name_short, significant_tissues)) %>%
+  ggplot(., aes(x = name_short, y = significant_tissues, fill=dif)) + geom_col() + theme_minimal() + coord_flip() + 
+  scale_fill_gradient2(low = "#66c2a5", high = "#8da0cb") + 
+  ylab("# Significant tissues") + xlab("") + labs(fill = "")+ ggtitle("Performance difference", subtitle = "Selected networks vs all networks")
 
 #ggsave("../Figs/barchart_n_tissues_vs_performance_difference.pdf", height = 4, width = 6)
 

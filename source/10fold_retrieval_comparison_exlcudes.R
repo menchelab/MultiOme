@@ -132,5 +132,38 @@ AUC_folds <- bind_rows(AUC_folds_each)
 
 saveRDS(AUC_folds, "../cache/fold_cv_processed_results_revision_excludes.RDS")
 
+##################
+
+# Single layer (most significant per disease
+most_significant_single_layer_per_disease <- result_df_combn %>% 
+  group_by(name) %>%
+  # filter(LCC.zscore == max(LCC.zscore)) %>%
+  filter(minusLogpval == max(minusLogpval)) %>%
+  select(name, network) %>%
+  filter(name %in% names(Orphanet_df))
 
 
+rank_networks_singleMostSignif <- list()
+for(i in unique(most_significant_single_layer_per_disease$network)){
+  diseases <- most_significant_single_layer_per_disease %>% filter(network == i) %>% pull(name)
+  rank_networks_singleMostSignif[[i]] <-process_rank_network(network_set =i, 
+                                                             all_diseases = diseases,
+                                                        el_all = el_all, 
+                                                        weighted = F, disease_specific = F, to_exclude = NULL)
+}
+
+
+rank_networks_singleMostSignif_processed <- lapply(rank_networks_singleMostSignif, function(x) 
+  lapply(x, function(df) 
+    lapply(1:10, function(iter) 
+      df %>% filter(fold == iter) %>% select(trueset, rank))))
+
+aucvals_singleSignif <- pbapply::pblapply(rank_networks_singleMostSignif_processed,  function(x) lapply(x, auc_output))
+
+
+######
+AUC_folds_each_singleSignif <- lapply(1:length(aucvals_singleSignif), function(x) auc_to_df(aucvals_singleSignif[[x]], label = names(aucvals_singleSignif)[x]))
+
+AUC_folds_singleSignif <- bind_rows(AUC_folds_each_singleSignif)
+
+saveRDS(AUC_folds_singleSignif, "../cache/fold_cv_processed_results_revision_singleMostSignifLayer.RDS")
