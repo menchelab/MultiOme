@@ -84,7 +84,7 @@ p <- ggplot(processed_result_df_plot, aes(name_short, subtype)) + geom_tile(fill
 A4width = 21
 A4height = 29.7
   
-#ggsave(heatmap_file, plot = p, width = 1.5*0.5*A4width, height = 1.5*0.175*A4height)
+ggsave(heatmap_file, plot = p, width = 0.4*A4width, height = 0.175*A4height, scale = 1.5)
 
 p
 #knitr::include_graphics(rare_genetic_heatmap_file)
@@ -109,9 +109,9 @@ p = ggplot(ntissue_per_disease, aes(x = name_short, y = n, fill = LCC.signif)) +
   coord_flip() + 
   scale_y_continuous(breaks= scales::pretty_breaks())
 
-P_without_label <- p + theme(axis.text.y = element_blank())
+P_without_label <- p + theme(axis.text.y = element_blank()) + guides(fill = F)+xlab("")+scale_y_continuous(breaks = c(0,10,20))
 
-#ggsave("../Figs/barplot_ntissue_per_disease_for_heatmap_updated.pdf",P_without_label,  width = 0.25*1.1*0.5*A4width, height = 1.1*0.175*A4height)
+#ggsave("../Figs/barplot_ntissue_per_disease_for_heatmap_updated.pdf",P_without_label,  width = 0.125*0.5*A4width, height = 0.2*A4height, scale = 1.1)
 
 p
 ```
@@ -129,7 +129,7 @@ p = ggplot(ndisease_per_tissue, aes(x = subtype, y = n, fill = LCC.signif)) + ge
   ylab("# Disease groups") + scale_y_continuous(breaks= scales::pretty_breaks())  + facet_grid(.~main_type, space = "free", scale = "free") 
 
 P_without_label <- p + theme(axis.text.x = element_blank())
-#ggsave("../Figs/barplot_ndisease_per_tissue_for_heatmap_updated.pdf",P_without_label, width = 1.1*0.5*A4width, height = 0.35*1.1*0.175*A4height)
+ggsave("../Figs/barplot_ndisease_per_tissue_for_heatmap_updated.pdf",P_without_label, width = 1.1*0.5*A4width, height = 0.35*1.1*0.175*A4height)
 
 p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```

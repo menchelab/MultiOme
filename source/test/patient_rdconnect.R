@@ -14,6 +14,9 @@ library(igraph)
 
 
 ## load the pre-computed LCC results 
+print("read results signif data")
+
+
 result_folder = "../cache/output/Orphageneset_rare/"
 result_df = readRDS(paste0(result_folder, "LCC_and_distance_calculation_results.RDS"))
 
@@ -31,9 +34,10 @@ all_LCC_val_signif = result_df %>% dplyr::filter(correctedPval < 0.05) %>% dplyr
 # read all edgelists for all significant networks
 network_dirs = "../data/network_edgelist_combn//"
 
+print("read edgelist")
 el_all = list()
 for(i in unique(result_df$network)){
-  el_all[[i]] = read_tsv(paste0(network_dirs, i,".tsv"), col_names = c("A","B"), skip = 1, col_types = 'ss')
+  el_all[[i]] = read_tsv(paste0(network_dirs, i,".tsv"), col_names = c("A","B"), skip = 1)
 }
 
 el_all = lapply(el_all, process_edgelist)

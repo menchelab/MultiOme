@@ -33,6 +33,9 @@ g <- list()
 # Add PPI
 g$PPI_HIPPIE <- process_graph_data("../data/network_edgelists/ppi.tsv")[[1]]
 
+g$ppi_HuRI <- process_graph_data("../data/network_edgelist_additional/ppi_HuRI.tsv")[[1]]
+g$ppi_BioPlex <- process_graph_data("../data/network_edgelist_additional/ppi_BioPlex.tsv")[[1]]
+
 # measure overlaps between these data
 g$PPI_LargeScale <-  g$ppi_HuRI %u% g$ppi_BioPlex
 write_tsv(as_data_frame(g$PPI_LargeScale), file = "../data/network_edgelist_additional/PPI_LargeScale.tsv")
