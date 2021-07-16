@@ -181,7 +181,12 @@ p
 
 ```{r compare performance upon network layer removal}
 AUC_folds_exclude <- readRDS("../cache/fold_cv_processed_results_revision_excludes.RDS") %>%
-  rbind(., readRDS("../cache/fold_cv_processed_results_revision_Signifs.RDS") )
+  # results from Signif
+  rbind(., readRDS("../cache/fold_cv_processed_results_revision_Signifs.RDS") ) %>%
+  filter(!label %in% c("Signif_withoutPhenotype")) %>%
+  # results from GOBP,GOMF,HP,MP
+  rbind(., readRDS("../cache/fold_cv_processed_results_revision_excludesOntology_merged.RDS") %>%  filter(!label %in% c("Signif_withoutGO"))) 
+  #rbind(., readRDS("../cache/fold_cv_processed_results_revision_excludesOntology_single.RDS") ) 
 
 
 AUC_folds_exclude <- AUC_folds_exclude %>% 
@@ -207,29 +212,32 @@ order_network <- AUC_folds_Signifs %>% group_by(excluded_layer) %>% summarise(me
 
 
 AUC_folds_Signifs <- AUC_folds_Signifs %>%
+  filter(excluded_layer %in% order_network) %>%
   mutate(excluded_layer = fct_relevel(excluded_layer, order_network),
          excluded_layer = recode_factor(excluded_layer, "All Significant layers" = "Signif_all"),
          excluded_layer = fct_relevel(excluded_layer, "All Significant layers"),
         excluded_layer = fct_relevel(excluded_layer, "LargeScaleNet", after = Inf))
-  
+
 
 order_network <- AUC_folds_exclude_plot %>% group_by(excluded_layer) %>% summarise(median = median(med)) %>% arrange(median) %>% pull(excluded_layer)
 
 AUC_folds_exclude_plot$excluded_layer <- factor(AUC_folds_exclude_plot$excluded_layer, levels = order_network)
 
-ggplot(AUC_folds_Signifs, aes(x=excluded_layer, y=med)) + geom_boxplot() + theme_cowplot() 
+#ggplot(AUC_folds_Signifs, aes(x=excluded_layer, y=med)) + geom_boxplot() + theme_cowplot() 
+
 
 
 p_compare_all_nets <- ggwithinstats(
-  data = AUC_folds_Signifs %>% filter(!excluded_layer %in% c("CoEx", "CoEssential", "PPI")) %>% ungroup,
+  data = AUC_folds_Signifs %>% filter(!excluded_layer %in% c("CoEx", "CoEsssential", "PPI")) %>% ungroup,
   x = excluded_layer,
-  p.adjust.method = "BH",
   y = med,
+  p.adjust.method = "BH",
  title = "AUC values upon removing layers",
 #  caption = "Data source: `WRS2` R package",
   ggtheme = theme_cowplot(), 
   xlab = "Excluded layer",
   ylab = "10-fold CV median AUC", 
+  sample.size.label = F,
 #ggplot.component = list(scale_color_brewer(palette = "Blues"), scale_fill_brewer(palette = "Blues")),
 type = "non-parametric"#, 
 #ggplot.component = c(col = "grey")
@@ -237,10 +245,45 @@ type = "non-parametric"#,
 )
 
 
-#ggsave("../Figs/compare_CuratedNetwork_removal_AUC.pdf", p_compare_all_nets, height = 4, width =6, scale = 1.125)
+ggsave("../Figs/compare_CuratedNetwork_removal_AUC.pdf", p_compare_all_nets, height = 4, width =6, scale = 1.125)
 
 p_compare_all_nets
 ```
+
+
+```{r compare each of the pair separately}
+
+# networks_to_consider <- AUC_folds_Signifs %>% filter(!excluded_layer %in% c("CoEx", "CoEsssential")) %>% pull(excluded_layer) %>% unique
+# 
+# for(i in 1:(length(networks_to_consider)-1)){
+#   for(j in (i+1):length(networks_to_consider)){
+#     p <- ggwithinstats(
+#   data = dplyr::filter(
+#     AUC_folds_Signifs,
+#     excluded_layer %in% networks_to_consider[c(i,j)]
+#   ),
+#   x = excluded_layer,
+#   y = med,
+#   type = "np", # non-parametric statistics
+#   ggtheme = theme_cowplot(), 
+#   xlab = "Excluded layer",
+#   ylab = "10-fold CV median AUC", 
+#   sample.size.label = F,
+#   grouping.var = excluded_layer
+# )
+#     ggsave(paste0("../Figs/RemovingLayers/compare_CuratedNetwork_removal_AUC_",i,"_",j,".pdf"), p, height = 4, width =2, scale = 1.125)
+#   }
+# }
+
+dat <- AUC_folds_Signifs %>% filter(excluded_layer %in% c("LargeScaleNet", "Signif_all")) %>%
+  select(excluded_layer, med, name) %>%
+  pivot_wider(names_from = excluded_layer, values_from = med) 
+
+p <- ggplot(dat, aes(x = Signif_all, y = LargeScaleNet, label = name)) + geom_point() + geom_abline(intercept = 0, slope = 1, col ="red")
+plotly::ggplotly(p)
+
+```
+
 
 ```{r compare PPI}
 AUC_folds_PPI <-  rbind(AUC_folds_exclude_plot %>% filter(type == "PPIs") %>% select(colnames(.)[1:6] ),
@@ -366,3 +409,87 @@ p_compare_main
 ```
 
 
+
+## relationship between the disease, number of signifiant networks, and number of genes (Fig. 5d)
+
+
+```{r}
+## load the LCC results 
+source("../source/cache_all_networks_and_disease_genes.R")
+## count number of networks, only coex
+
+N_signif_net = processed_result_df_plot %>% 
+  filter(type=="Co-expression") %>%
+  count(name, name_short, name = "significant_tissues")
+
+
+## load the gene sets
+Orphanet_df <-rare_genetic_diseases_genes$disgene_df %>% select(name, N)
+
+Orphanet_df <- left_join(Orphanet_df, N_signif_net)
+
+# retrieve median values
+AUC_folds_perf_compare <- AUC_folds_summary_updated_plot %>% 
+  pivot_wider(., id_cols = name, names_from = label, values_from = med) %>%
+  mutate(dif = `Significant layers` - `All layers`) %>%
+  rename(name_short = "name") %>%
+  left_join(x=., y = Orphanet_df) #, by = c(name = "name_short"))
+
+AUC_allnets_median <- AUC_folds_summary_updated_plot %>% 
+    rename(name_short = "name") %>%
+  dplyr::select(-Q25, -Q75) %>%
+  dplyr::filter(label == 'Significant layers') %>%
+  left_join(x=., y = Orphanet_df)
+
+
+p1 <- ggplot(AUC_folds_perf_compare %>%
+               ungroup %>%
+               mutate(label = ifelse(dif< 0, name_short,""))
+             , aes(x = significant_tissues, y = dif)) + 
+  geom_point(col = "grey40") + 
+  theme_cowplot() + guides(size = F) + 
+  geom_hline(yintercept = 0, linetype = "dotted", col = "grey20") + 
+ # stat_summary(fun.data= mean_cl_normal) + 
+  geom_smooth(method='lm', se = F) +
+  xlab("# Significant tissues") + ylab(expression("Performance diff. ("*Delta*"AUC)"))
+
+p2 <- ggplot(AUC_allnets_median, aes(x = N, y = med)) + geom_point(col = "grey40") + theme_cowplot() + 
+  guides(size = F) + xlab("# Associated genes") + ylab("Median AUC") + 
+  scale_x_log10() +
+   geom_smooth(method='lm', se = F)   
+
+
+
+p <- p1 + p2
+
+#ggsave(filename = "../Figs/scatter_AUC_vs_ntissues_updated.pdf",plot = p,  height = 3, width = 6)
+
+p
+```
+### Corresponding statistical parameters on the left plot (Performance difference vs #tissue):
+
+```{r}
+cor.test(AUC_folds_perf_compare$dif,AUC_folds_perf_compare$significant_tissues, method = "spearman")
+```
+
+### Corresponding statistical parameters on the right plot (Performance vs #genes):
+```{r}
+cor.test(AUC_allnets_median$N, AUC_allnets_median$med, method = "spearman")
+```
+
+## Performance difference: using relevant networks vs all networks (Suppl. Fig. 5b)
+
+
+```{r}
+p <- AUC_folds_perf_compare %>%
+  left_join(., distinct(AUC_folds_summary, name) %>% rename(name_short = "name"), by="name_short") %>%
+  ungroup %>% 
+  mutate(name_short = fct_reorder(name_short, significant_tissues)) %>%
+  ggplot(., aes(x = name_short, y = significant_tissues, fill=dif)) + geom_col() + theme_minimal() + coord_flip() + 
+  scale_fill_gradient2(low = "#66c2a5", high = "#8da0cb") + 
+  ylab("# Significant tissues") + xlab("") + labs(fill = "")+ ggtitle("Performance difference", subtitle = "Selected networks vs all networks")
+
+#ggsave("../Figs/barchart_n_tissues_vs_performance_difference.pdf", height = 4, width = 6)
+
+p
+```

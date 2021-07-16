@@ -63,7 +63,7 @@ process_rank_network <- function(network_weight_df_custom = NULL, network_set=NU
     # set seed
     disease_genes = intersect(Orphanet_df[[disease_current]], gene_allnet)
     n = length(disease_genes)
-    
+    print(n)
     ## shuffle data
     seed = 144
     disease_genes = disease_genes[sample(n)]

@@ -157,6 +157,7 @@ ggsave("../Figs/additional_network_properties.pdf", plot = plot_combi, height = 
 
 ```{r}
 
+
 bioplex_baits_293T <- read_tsv("../data/raw_data/Bioplex_293T-baits.tsv")
 bioplex_baits_293T$cell = "293T"
 bioplex_baits_HCT116 <- read_tsv("../data/raw_data/Bioplex_HCT116-baits.tsv")
@@ -171,17 +172,19 @@ ppi_degree = ppi_degree[ppi_degree>0]
 p_k = degree_distribution(g$PPI_HIPPIE)
 p_k = p_k[-1]
 
-
+# q_k =  remain degree distribution
 q_k = (1:max(ppi_degree) +1)*c(p_k[-1],0)/mean(ppi_degree)
 #q_k = ppi_degree-1
 
 mean_q  = sum(1:max(ppi_degree)*q_k)
 variance_q = sum((mean(ppi_degree)-1:max(ppi_degree))^2 * q_k)
 
+avg_excess_degree_neighbours =  
+
 neighour_degree_avg = knn(g$PPI_HIPPIE)$knn 
 neighour_degree_avg = neighour_degree_avg[names(ppi_degree)]
 
-local_assortativity = (ppi_degree-1)*ppi_degree*(neighour_degree_avg - mean_q)/(2*ecount(g$PPI_HIPPIE)*variance_q)
+local_assortativity = (ppi_degree-1)*ppi_degree*(neighour_degree_avg - 1 - mean_q)/(2*ecount(g$PPI_HIPPIE)*variance_q)
 
 cuts <- c(0,1,2,5, 10,20, 50,100, 200, 500,1000,5000)
 citation_assortativity = full_join(citation_count,

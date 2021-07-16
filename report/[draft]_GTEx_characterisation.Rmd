@@ -16,7 +16,7 @@ protein_coding_sym <- read_tsv("../cache/coding_genes_in_gtex.tsv")
 protein_coding_sym$protein_coding = T
 
 ensg_to_symbol <- full_join(ensg_to_symbol, protein_coding_sym) %>%
-  rename(Description = "symbol")
+  dplyr::rename("Description" = "symbol")
 
 gtex_avg_expression_with_entrez <- full_join(ensg_to_symbol, gtex_avg_expression)
 
@@ -69,11 +69,6 @@ colnames(gtex_expression_count_df) = c("count", "Measure")
 gtex_expression_count_df <- gtex_expression_count_df %>%
   mutate(Measure = factor(Measure, levels =  c("AllReported",  "Protein_coding",  "avg_TPMover1", "BeforeDisparity", "Final_nodes"), label = c("All transcripts", "Protein\ncoding", "Reference: \nTPM > 1", "Before\ndisp. filter", "Nodes in\nfinal networks")))
 
-colors <- c('#7fc97f','#beaed4','#fdc086','#ffff99','#386cb0')
-
-p_nodes <- ggplot(gtex_expression_count_df, aes(x = Measure, y = count, fill = Measure)) + 
-  geom_boxplot() + guides(fill = F) + cowplot::theme_cowplot() + xlab("Criterion") + ylab("Count") + ggtitle("# Nodes") + scale_fill_manual(values = colors) 
-
 
 edge_count <- list()
 edge_count[["Before\ndisp. filter"]] <- sapply(full_nodes, function(x) x['edges'])
@@ -81,8 +76,22 @@ edge_count[["Nodes in\nfinal networks"]] <- sapply(coex_nets, function(x) ecount
 edge_count_df <-reshape2:: melt(edge_count)
 colnames(edge_count_df) = c("count", "Measure")
 
+
+# Plotting
+########
+
+colors <- c('#7fc97f','#beaed4','#fdc086','#ffff99','#386cb0')
+
+p_nodes <- ggplot(gtex_expression_count_df, aes(x = Measure, y = count, fill = Measure)) + 
+  geom_violin() + 
+     geom_boxplot(width = 0.2, fill = "white") +
+  guides(fill = F) + cowplot::theme_cowplot() + xlab("Criterion") + ylab("Count") + ggtitle("# Nodes") + scale_fill_manual(values = colors) 
+
+
 p_edges <- ggplot(edge_count_df, aes(x = Measure, y = count, fill = Measure)) + 
-  geom_boxplot() + guides(fill = F) + cowplot::theme_cowplot() + xlab("Criterion") + ylab("Count") + ggtitle("# Edges") + scale_fill_manual(values = colors[4:5]) + scale_y_log10()
+  geom_violin() + 
+   geom_boxplot(width = 0.2, fill = "white") +
+  guides(fill = F) + cowplot::theme_cowplot() + xlab("Criterion") + ylab("Count") + ggtitle("# Edges") + scale_fill_manual(values = colors[4:5]) + scale_y_log10()
 
 
 p_coex <- p_nodes +p_edges + plot_layout(widths = c(2, 1))
@@ -128,10 +137,12 @@ Interactions exists in PPI but no co-expression?
 genes = c(
 BRCA1 = "ENSG00000012048",
 GATA3 = "ENSG00000107485",
-GABPB2 = "ENSG00000143458")
+GABPB2 = "ENSG00000143458",
+MSH6 = "ENSG00000095002")
 
 
-load("../cache/temp/E-MTAB-5214-atlasExperimentSummary.Rdata")
+a <- readRDS("../cache/temp/expression_merged_tissue_group.RDS")
+#load("../cache/temp/E-MTAB-5214-atlasExperimentSummary.Rdata")
 #dat <- a$BST[genes,] %>% t() %>% as_tibble() %>% pivot_longer(., cols = colnames(.), names_to = "gene", values_to = "expression") %>%
 #  mutate(gene = factor(gene, levels = genes, labels = names(genes)))
 
@@ -146,6 +157,15 @@ dat2 <- a$BST[genes[c(1,3)],] %>% t() %>% as_tibble()
 colnames(dat2) = c("gene1", "gene2")
 
 p2 <- ggplot(dat2, aes(x = gene1, y = gene2)) + geom_point(col = "grey25", alpha = 0.6) + scale_x_log10() + scale_y_log10() + ggtitle("BRCA1-GABPB2", subtitle = paste0("cor: ", round(cor(dat2$gene1, dat2$gene2, method = "pearson"), 3))) + theme_cowplot()+ xlab("BRCA1 expression") + ylab("GABPB2 expression") + theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks = element_blank())
+
+
+
+dat3 <- a$BST[genes[c(1,4)],] %>% t() %>% as_tibble() 
+colnames(dat3) = c("gene1", "gene2")
+
+p3 <- ggplot(dat3, aes(x = gene1, y = gene2)) + geom_point(col = "grey25", alpha = 0.6) + scale_x_log10() + scale_y_log10() + ggtitle("BRCA1-MSH6", subtitle = paste0("cor: ", round(cor(dat3$gene1, dat3$gene2, method = "pearson"), 3))) + theme_cowplot() + xlab("BRCA1 expression") + ylab("MSH6 expression")+ theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks = element_blank())
+
+
 
 library(patchwork)
 p_gene <- p1 + p2
@@ -212,5 +232,15 @@ cor_index_merge$group <- cut(cor_index_merge$cor_HRV, breaks = seq(0,1,0.05), la
 cor_index_merge_group_count <- count(cor_index_merge, group, pass)
 
 ggplot(cor_index_merge_group_count %>% filter(group %in% seq(0.75,1,0.05)), aes(x = group, y = n, fill = pass)) + geom_col(position = "dodge") + scale_y_log10()
+```
+
+```{r}
+BRCA1_expression <-gtex_avg_expression_with_entrez  %>%  filter(protein_coding) %>% select(Description, `Breast - Mammary Tissue`, Ovary)
+
+BRCA1_percentile <- BRCA1_expression %>%
+  mutate(rank_breast = rank(- `Breast - Mammary Tissue`)/sum(gtex_avg_expression_with_entrez$`Breast - Mammary Tissue`>0, na.rm = T),
+         rank_ovary = rank(- Ovary)/sum(gtex_avg_expression_with_entrez$Ovary>0, na.rm = T)
+         ) %>%
+  filter(Description == "BRCA1")
 ```
 

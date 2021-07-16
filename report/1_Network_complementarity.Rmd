@@ -361,7 +361,8 @@ network_sim_df <- network_sim_df %>%
 # label p values into classes
 network_sim_df <- network_sim_df %>% 
   # make p values in groups
-  mutate(overlap.pval_level = cut(overlap.pval, 
+  mutate(adjusted_overlapPval = p.adjust(overlap.pval, method = "BH"),
+         overlap.pval_level = cut(adjusted_overlapPval, 
                                   breaks = rev(c(1,5e-2, 1e-3, 1e-4, 1e-5, 0)), 
                                   labels = rev(c("ns","*","**","***","****")), 
                                   include.lowest = T, ordered_result = T),
