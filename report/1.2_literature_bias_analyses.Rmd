@@ -1,0 +1,143 @@
+# Literture bias analysis 
+
+Investigating gene properties derived from curated databases in terms of literature bias (Suppl. Fig. 4).
+
+- How does the literature bias arise? 
+- Why do GO derived networks have negative literature biases?
+- Do network level and feature level exhibit the same properties?
+
+## Collect gene features from four example datasets
+1. Popularity - via citation counts
+2. # HPO terms matching genes
+3. # Associated GO terms (BP and MF)
+4. # Associated reactome pathways
+5. Brain expression (as reference for non-curated data)
+
+```{r}
+# Downloaded the precomputed gene features (count of annotated terms or expression level)
+
+if(!file.exists("../cache/gene_features.tsv")){
+  source("../source/collect_gene_features.R")
+}
+
+gene_feature_df <- read_tsv(file = "../cache/gene_features.tsv")
+
+head(gene_feature_df)
+```
+
+## Perform correlations among selected feature
+1. Feature count - PubMed Count
+2. Feature count - Network degree
+3. Network degree - PubMed count (Literature bias)
+
+
+```{r, fig.width = 12, fig.height = 8}
+pacman::p_load(hexbin, cowplot, ggstatsplot, patchwork)
+
+
+gene_feature_cor_df <- gene_feature_df %>% 
+  filter(!is.na(count)) %>%
+ # select(-PubMedRank) %>%
+  filter(!is.na(count)) %>%
+  pivot_longer(cols = colnames(gene_feature_df)[-c(1,2,3)], names_to = "feature", values_to = "n") %>%
+  group_by(feature) %>%
+  mutate(feature_rank = rank(-n))
+
+gene_feature_cor_df$feature <- factor(gene_feature_cor_df$feature, 
+                                      levels = c("AllBrainAvg", "FrontalCortex", "n_pathways", "BP_terms", "MF_terms", "AllGO_terms", "Informative_GOterms", "HP_terms", "Informative_HP_terms"),
+                                      labels = c("Expression (Brain avg)", "Expression (frontal cortex)", "Reactome pathways", "# GO terms (BP)", "# GO terms (MF)", "# GO terms", "#Informative GO terms", "# HP terms", "# Informative HP terms"))
+
+
+# select particular networks to plot as examples
+selected_features <- c("# GO terms (BP)", "# GO terms (MF)","# HP terms", "Reactome pathways", "Expression (Brain avg)")
+
+
+gene_feature_cor_df_plot <- gene_feature_cor_df %>% 
+  filter(feature %in% selected_features) %>%
+  mutate(feature  = factor(feature, levels = selected_features))
+
+
+# load required networks
+g <- process_graph_data(paste0("../data/network_edgelists/", c("coex_BRO", "GOBP", "GOMF", "HP", "reactome_copathway"), ".tsv"))
+
+
+degrees <- lapply(g, function(x) tibble(degree = degree(x), gene = names(degree(x))))
+names(degrees) <- c("Expression (Brain avg)", "# GO terms (BP)", "# GO terms (MF)",  "# HP terms", "Reactome pathways")
+degree_df <- bind_rows(degrees, .id = "feature")
+
+
+gene_feature_cor_df_plot <- inner_join(gene_feature_cor_df_plot, degree_df) %>%
+  filter(!is.na(feature))
+
+
+# PLot 1: feature and PubNed
+p_pubmed_feature <- ggplot(gene_feature_cor_df_plot, aes(y=count, x=n)) + 
+  geom_hex(bins = 30) + 
+  scale_fill_viridis_c() +
+ # scale_fill_gradient(low = "white", high = "navy") +
+  geom_smooth(method = 'lm', se = F, color = 'red', linetype = "dashed") +
+  #ggrepel::geom_text_repel(aes(label = lab))+
+  ggpubr::stat_cor(method = "spearman",  r.accuracy = 0.01, col = "white") +
+  facet_grid(.~feature, scales = "free") +
+  theme_cowplot() + 
+  scale_x_log10() + 
+  scale_y_log10() +
+  ylab("# PubMed") +
+  xlab("Feature count (Expression level | # terms)") +
+  theme(
+  panel.background = element_rect(fill = "#440154FF",
+                                colour = "#440154FF",
+                                size = 0.5, linetype = "solid"))
+
+
+# PLot 2
+p_feature_degree <- ggplot(gene_feature_cor_df_plot, aes(y=degree, x=n)) + 
+  geom_hex(bins = 30) + 
+  scale_fill_viridis_c() +
+ # scale_fill_gradient(low = "white", high = "navy") +
+  geom_smooth(method = 'lm', se = F, color = 'red', linetype = "dashed") +
+  #ggrepel::geom_text_repel(aes(label = lab))+
+  ggpubr::stat_cor(method = "spearman", r.accuracy = 0.01, col = "white") +
+  facet_grid(.~feature, scales = "free") +
+  theme_cowplot() + 
+  scale_x_log10() + 
+  scale_y_log10() +
+  ylab("Network degree") +
+  xlab("Feature count (Expression level | # terms)") +
+  theme(
+  panel.background = element_rect(fill = "#440154FF",
+                                colour = "#440154FF",
+                                size = 0.5, linetype = "solid"))
+
+# PLot 3
+p_social_bias_degree <- ggplot(gene_feature_cor_df_plot, aes(y=degree, x=count)) + 
+  geom_hex(bins = 30) + 
+  scale_fill_viridis_c() +
+ # scale_fill_gradient(low = "white", high = "navy") +
+  geom_smooth(method = 'lm', se = F, color = 'red', linetype = "dashed") +
+  #ggrepel::geom_text_repel(aes(label = lab))+
+  ggpubr::stat_cor(method = "spearman", r.accuracy = 0.01, col = "white") +
+  facet_grid(.~feature, scales = "free") +
+  theme_cowplot() + 
+  scale_x_log10() + 
+  scale_y_log10() +
+  ylab("Network degree") +
+  xlab("# PubMed") +
+  theme(
+  panel.background = element_rect(fill = "#440154FF",
+                                colour = "#440154FF",
+                                size = 0.5, linetype = "solid"))
+
+
+
+p <- p_pubmed_feature/p_feature_degree/p_social_bias_degree
+
+#ggsave("../Figs/hexbin_plot_network_degree_vs_pubmed_count_vs_feature_count_v2.pdf", p, width = 12, height = 8)
+
+suppressMessages(p)
+```
+
+
+
+
+
