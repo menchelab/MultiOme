@@ -1,0 +1,40 @@
+# GTEx data characterisation (Suppl. Fig. )
+
+```{r}
+
+library(patchwork)
+
+if(!file.exists("../cache/coex_nets_node_and_edge_counts.RDS")){
+  source("../source/coex_nets_node_and_edge_counts.R")
+}
+
+counts <- readRDS("../cache/coex_nets_node_and_edge_counts.RDS")
+
+# Plotting
+########
+
+colors <- c('#7fc97f','#beaed4','#fdc086','#ffff99','#386cb0')
+
+p_nodes <- ggplot(counts$node_counts, aes(x = Measure, y = count, fill = Measure)) + 
+  geom_violin() + 
+     geom_boxplot(width = 0.2, fill = "white") +
+  guides(fill = F) + cowplot::theme_cowplot() + xlab("Criterion") + ylab("Count") + ggtitle("# Nodes") + scale_fill_manual(values = colors) 
+
+
+p_edges <- ggplot(counts$edge_counts, aes(x = Measure, y = count, fill = Measure)) + 
+  geom_violin() + 
+   geom_boxplot(width = 0.2, fill = "white") +
+  guides(fill = F) + cowplot::theme_cowplot() + xlab("Criterion") + ylab("Count") + ggtitle("# Edges") + scale_fill_manual(values = colors[4:5]) + scale_y_log10()
+
+
+p_coex <- p_nodes +p_edges + plot_layout(widths = c(2, 1))
+
+#ggsave("../Figs/number_of_nodes_and_edges_coexpression_at_each_stages.pdf", p_coex, width = 6, height = 3, scale = 1.5)
+
+
+p_coex  
+```
+
+
+
+
