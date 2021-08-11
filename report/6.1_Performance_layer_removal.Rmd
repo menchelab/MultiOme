@@ -1,0 +1,186 @@
+# Performance upon curated layers removal
+
+Performance for 10-fold CV for 26 disease group gene retrieval upon layer removal (Suppl. Fig. 7d)
+- PPI
+- Co-Pathway
+- GOMF
+- GOBP
+- HP
+- MP
+- All of them
+
+
+```{r compare performance upon single layer removal}
+AUC_folds_exclude <- readRDS("../cache/fold_cv_processed_results_revision_excludesSingleLayers.RDS") %>%
+  rbind( readRDS("../cache/fold_cv_processed_results_revision.RDS") %>% filter(label == "Largescale_signif"))
+
+
+#AUC_folds_exclude <- AUC_folds_exclude %>% 
+#  group_by(name, label) %>% 
+#  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75)) #%>%
+
+#AUC_folds_exclude_plot <- rbind(AUC_folds_exclude,
+#                                AUC_folds_revision %>% dplyr::filter(label %in% c("signif_withCoexCore", "Largescale_signif_weighted", "Largescale_signif", "coex_Signif", "coex_core")))
+
+AUC_folds_Signif_all <-  readRDS("../cache/fold_cv_processed_results_revision.RDS") %>%
+  filter(label == "signif_withCoexCore") 
+existing_disease <- unique(AUC_folds_Signif_all$name)
+
+new_df <- AUC_folds_summary <- readRDS("../cache/fold_cv_processed_results.RDS") %>% filter(!name %in% existing_disease, label == "significant networks")  %>% rename(AUC = "mean") %>% select(name, AUC)
+
+new_df_dup <- new_df
+for(i in 1:9){
+  new_df_dup <- rbind(new_df_dup, new_df)
+}
+
+new_df_dup <- new_df_dup%>%
+  mutate(name = as.character(name)) %>%
+  select(AUC, name) %>% as.data.frame()
+
+AUC_folds_Signif_all <- AUC_folds_Signif_all %>%
+  select(-label) %>%
+  rbind(new_df_dup) %>%
+  mutate(label = "Signif_All")
+
+AUC_folds_exclude_plot <- rbind(AUC_folds_exclude,
+                                AUC_folds_Signif_all)
+
+
+order_network <- AUC_folds_exclude_plot %>% group_by(label) %>% summarise(median = mean(AUC)) %>% arrange(median) %>% pull(label) %>% as.character() %>% rev()
+
+
+#AUC_folds_Signifs <- AUC_folds_Signifs %>%
+#  filter(excluded_layer %in% order_network) %>%
+#  mutate(excluded_layer = fct_relevel(excluded_layer, order_network),
+#         excluded_layer = recode_factor(excluded_layer, "All Significant layers" = "Signif_all"),
+#         excluded_layer = fct_relevel(excluded_layer, "All Significant layers"),
+#        excluded_layer = fct_relevel(excluded_layer, "LargeScaleNet", after = Inf))
+
+
+#order_network <- AUC_folds_exclude_plot %>% group_by(excluded_layer) %>% summarise(median = median(med)) %>% arrange(median) %>% pull(excluded_layer)
+
+order_network_label <- c("All significant", "Co-Pathway\n(Reactome)", "GO\n(MF)","Phenotype\n(MP)", "GO\n(BP)", "PPI", "Phenotype\n(HP)", "All curated")
+
+AUC_folds_exclude_plot$layer <- factor(AUC_folds_exclude_plot$label, levels = (order_network), labels = (order_network_label), ordered = T)
+
+AUC_folds_exclude_plot  <- AUC_folds_exclude_plot %>% ungroup
+
+#AUC_folds_exclude_plot <- AUC_folds_exclude_plot[order(AUC_folds_exclude_plot$layer),]
+
+#AUC_folds_exclude_plot$layer <- as.character(AUC_folds_exclude_plot$label)
+
+list_signif <- lapply(order_network[order_network_label!="All significant"], function(x) c("All significant", x))
+
+pacman::p_load(ggsignif)
+
+p_compare_all_nets <- ggwithinstats(
+  data = AUC_folds_exclude_plot ,
+  x = layer,
+  y = AUC,
+    
+  p.adjust.method = "BH",
+ title = "AUC values upon removing layers",
+#  caption = "Data source: `WRS2` R package",
+  ggtheme = theme_cowplot(), 
+  xlab = "Excluded layer",
+  ylab = "10-fold CV median AUC", 
+  sample.size.label = F,
+#ggplot.component = list(scale_color_brewer(palette = "Blues"), scale_fill_brewer(palette = "Blues")),
+type = "non-parametric"#, 
+#ggplot.component = c(col = "grey")
+#  ggtheme = ggthemes::theme_fivethirtyeight()
+, pairwise.comparisons = F,
+ centrality.plotting = FALSE
+)
+
+
+#ggsave("../Figs/compare_CuratedNetwork_removal_AUC_new.pdf", p_compare_all_nets, height = 4, width =7, scale = 1.25)
+
+p_compare_all_nets
+```
+
+## The impact of removing PPI layer (Suppl. Fig. 7c)
+- Performance based on subsets of the PPI (curated, large-scale, full)
+- Performance of random networks of same size to PPI 
+
+
+```{r compare PPI}
+# load the randomisation results
+if(!file.exists("../cache/fold_cv_processed_results_revision_LargeScalePPIRandomisation.RDS")){
+  source("../source/randomization_10fold_CV_largescale_PPI.R")
+}
+
+AUC_folds_PPI_additional <- readRDS("../cache/fold_cv_processed_results_revision.RDS") %>%
+  filter(grepl("PPI", label)) %>%
+#  rbind(., AUC_folds_PPI_largescale_random) %>%
+                          group_by(name, label) %>%
+  summarise(mean = mean(AUC), med = median(AUC), Q25 = quantile(AUC, 0.25), Q75 = quantile(AUC, 0.75))
+  
+AUC_folds_PPI <- readRDS("../cache/fold_cv_processed_results.RDS") %>%
+  filter(grepl("PPI", label)) %>%
+  select(name, mean, med, Q25, Q75, label) %>%
+  rbind(., AUC_folds_PPI_additional) %>%
+  mutate(label = factor(label, levels = c("PPI only", "PPI_curated", "PPI_largescale"), 
+                        labels = c("Full", "Curated", "Large scale")),
+         label_plot = label)
+  
+
+
+
+p_compare_PPI <- ggwithinstats(
+  data = AUC_folds_PPI,# %>% filter(!excluded_layer %in% c("CoEx", "CoEssential")) %>% ungroup,
+  x = label_plot,
+  y = med,
+  p.adjust.method = "BH",
+  title = "AUC values upon removing layers",
+#  caption = "Data source: `WRS2` R package",
+  ggtheme = theme_cowplot(), 
+  xlab = "PPI set",
+  ylab = "10-fold CV median AUC", 
+#ggplot.component = list(scale_color_brewer(palette = "Blues"), scale_fill_brewer(palette = "Blues")),
+type = "non-parametric"#, 
+#ggplot.component = c(col = "grey")
+#  ggtheme = ggthemes::theme_fivethirtyeight()
+)
+
+### Results from large sclae randomization
+AUC_folds_randomisation <- readRDS("../cache/fold_cv_processed_results_revision_LargeScalePPIRandomisation.RDS") %>% group_by(name) %>% summarise(AUC = mean(AUC)) %>%
+  mutate(layer = "Random\nControl")
+
+AUC_folds_randomisation <- rbind(AUC_folds_randomisation,
+                                 # to extend the axis: quick hack to add another label going up to one.
+                                 # this serves no purpose in the analyses
+                                 AUC_folds_randomisation %>% select(-layer) %>% 
+                                   mutate(AUC = seq(0.52, 1, 0.02),
+                                   layer ="zAxis spanner"))
+
+AUC_folds_randomisation[nrow(AUC_folds_randomisation), "AUC"] = 1  
+
+p_compare_PPI_rand <- ggstatsplot::ggbetweenstats(
+  data = AUC_folds_randomisation %>% ungroup,
+  x = layer,
+  y = AUC,
+    
+  p.adjust.method = "none",    
+ title = "Randomization PPI large-scale",
+#  caption = "Data source: `WRS2` R package",
+  ggtheme = theme_cowplot(), 
+  xlab = "Layer",
+  ylab = "10-fold CV median AUC", 
+  sample.size.label = F,
+type = "nonparametric",
+#ggplot.component = list(scale_color_brewer(palette = "Blues"), scale_fill_brewer(palette = "Blues")),, 
+#ggplot.component = c(col = "grey")
+#  ggtheme = ggthemes::theme_fivethirtyeight()
+pairwise.comparisons = F#,
+# centrality.plotting = FALSE
+)
+
+
+#ggsave("../Figs/compare_PPILargeScale_rand.pdf", p_compare_PPI_rand, height = 4, width =3, scale = 1)
+#ggsave("../Figs/compare_PPI_network_removal_AUC.pdf", p_compare_PPI, height = 4, width =3, scale = 1.125)
+
+p_compare_PPI + p_compare_PPI_rand
+```
+
+```
