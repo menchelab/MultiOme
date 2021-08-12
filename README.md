@@ -36,7 +36,7 @@ The Explorer is a Shiny app made for exploring results included in the manuscrip
 ### Detailed Inspection
 ![Detailed Inspection](https://github.com/menchelab/MultiOme/blob/main/Explorer/Figs/github/github_readme_Inspection.png?raw=true)
 
-The Explorer can be launched via [this link](http://lem.westeurope.cloudapp.azure.com:8880/app/MultiOmeExplorer)
+The Explorer can be launched via [http://menchelab.com/MultiOmeExplorer](http://menchelab.com/MultiOmeExplorer)
 
 ## The Reproducible Walkthrough Guides
 
@@ -47,7 +47,7 @@ Please find the following guidelines:
 1. The appearance of sections in this document is at the same order as in the manuscript, and can be navigated using the Table of Content (ToC) appeared on the top left corner of this document, with subsections corresponding to exact figures/statistics 
 2. The corresponding code chunks to each figures/analyses are provided above the output, and are hidden by default. To expand each code chunk, click `Show code`.
 3. This report mainly contains visualization and post-processing of major analyses. Heavier computations were pre-computed, and corresponding `R`, `sh`, or `py` scripts required for each analysis are mentioned for each section. These files are available in [/source](/source) folder.
-4. The pre-computed results are saved in `./cache` folder and can be downloaded from: [link](https://drive.google.com/file/d/1T7tJMojIbELeT-aLOD_Pv639eUgdGqUh/view). Unzip the folder under the main directory (`./cache`). 
+4. The pre-computed results are saved in `./cache` folder and can be downloaded from: [link](https://drive.google.com/file/d/1IpH8v2RLDRRXdqFvLZq-rUTwyqhGAezP/view?usp=sharing). Unzip the folder under the main directory (`./cache`). 
 5. The corresponding `Rmd` files used to produce this report can be found in [/report](/report) folder.
 
 ## Session information
