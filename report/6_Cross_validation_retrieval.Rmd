@@ -1,29 +1,30 @@
 # Modularity as quantification of pathobiological relevance
 
-Note: this was the old version and the indexed one sohuld be replaced by the new one.
+Note: this was the old version and the indexed one should be replaced by the new one.
 
 ```{r load data}
 pacman::p_load(patchwork, cowplot, ggstatsplot)
 knitr::opts_chunk$set(echo=FALSE)
 
-AUC_folds_file <- "../cache/fold_cv_processed_results.RDS"
-if(!file.exists(AUC_folds_file)){
-  source("../source/process_fold_cv_results.R")
+if(!file.exists("../cache/fold_cv_processed_results_revisioned_processed.RDS")){
+  source("../source/process_10fold_retrieval_for_revision.R")
 }
-palettes <- c('#fc8d62','#66c2a5','#8da0cb')
-
-AUC_folds_summary <- readRDS(AUC_folds_file)
+AUC_folds_summary_updated_plot <- readRDS("../cache/fold_cv_processed_results_revisioned_processed.RDS")
 ```
 
 ## ROC-AUC comparison among all diseases and and network selection (Fig. 5b)
 ```{r}
-p <- ggplot(AUC_folds_summary,aes(x=name_short, fill = label, group = label)) +
+palettes <- c('#66c2a5','#8da0cb',"#fec44f" , '#fc8d62')
+
+p <- ggplot(AUC_folds_summary_updated_plot,aes(x=name, fill = label, group = label)) +
    geom_ribbon(aes(ymin = Q25, ymax = Q75), alpha = 0.25) +
   geom_line(aes(y = med, col = label), linetype = 2) +
   coord_flip() + xlab("disease") + ylab("fold AUC") + theme_minimal_hgrid() + theme(legend.position = "bottom") +
   ggtitle("ROC-AUC comparison", subtitle = "area spans 25, 50 and 75% quantile") +
+  #scale_fill_brewer(type = "qual") + scale_color_brewer(type = "qual")
   scale_fill_manual(values=palettes) + scale_color_manual(values=palettes)
-#ggsave("../Figs/cvROC/AUC_folds_comparison_short_names.pdf", p, width = 6, height = 6)
+
+#ggsave("../Figs/AUC_folds_comparison_short_names_updated.pdf", p, width = 6, height = 6)
 
 p
 ```
@@ -32,22 +33,33 @@ p
 ## Corresponding p-value based on statistical test for avg ROC curve (Fig. 5c)
 
 ```{r}
-AUC_folds_summary_plot <- tibble(label = AUC_folds_summary$label, 
-                                 AUC = AUC_folds_summary$mean)
+AUC_folds_summary_updated_plot2 <- AUC_folds_summary_updated_plot %>%
+  mutate(label_plot = fct_recode(label, `Single most\n relevant layer`="SingleMostSignif"),
+         label_plot = fct_relevel(label_plot, "All layers", after = 1))
 
-plot_df = tibble(x = factor(AUC_folds_summary$label,  
-                            levels = c(  "PPI only" , "all networks"  , "significant networks"),
-                            labels = c(  "PPI only" , "All networks"  , "Significant networks")), y = AUC_folds_summary$mean)
+palettes2 <- c('#8da0cb','#66c2a5',"#fec44f" , '#fc8d62')
 
-barstatplot <- ggstatsplot::ggwithinstats(data = plot_df,
-              x = x, y = y,type = "np") + 
-  xlab("Method") + ylab("AUC") +
-  scale_color_manual(values = palettes) #+ylim(0.6, 1)
-  
+p_compare_main <- ggwithinstats(
+  data = AUC_folds_summary_updated_plot2,# %>% filter(!excluded_layer %in% c("CoEx", "CoEssential")) %>% ungroup,
+  x = label_plot,
+  y = med,
+  p.adjust.method = "fdr",
+  #title = "AUC values",
+#  caption = "Data source: `WRS2` R package",
+  ggtheme = theme_cowplot(), 
+  xlab = "Network layers",
+sample.size.label = F,
+pairwise.display = "significant",
+  ylab = "AUC", 
+#ggplot.component = list(scale_color_brewer(palette = "Blues"), scale_fill_brewer(palette = "Blues")),
+type = "non-parametric"#, 
+#ggplot.component = c(col = "grey")
+#  ggtheme = ggthemes::theme_fivethirtyeight()
+) + scale_color_manual(values = palettes2)
 
-#ggsave(plot = barstatplot, filename = "../Figs/10fold_cv_method_compared_boxplot.pdf", width = 6*0.8, height = 4*0.8)
+#ggsave(plot = p_compare_main, filename = "../Figs/10fold_cv_method_compared_boxplot_updated.pdf", width = 6.5, height = 4, scale = 0.9)
 
-barstatplot
+p_compare_main
 ```
 
 
@@ -60,9 +72,9 @@ barstatplot
 source("../source/cache_all_networks_and_disease_genes.R")
 ## count number of networks, only coex
 
-N_signif_net = processed_result_df_plot %>% 
-  filter(type=="Co-expression") %>%
-  count(name, name_short, name = "significant_tissues")
+N_signif_net = processed_result_df %>% 
+  filter(type=="Co-expression", LCC.signif!="none") %>%
+  count(name, name = "significant_tissues")
 
 
 ## load the gene sets
@@ -74,11 +86,11 @@ Orphanet_df <- left_join(Orphanet_df, N_signif_net)
 AUC_folds_perf_compare <- AUC_folds_summary_updated_plot %>% 
   pivot_wider(., id_cols = name, names_from = label, values_from = med) %>%
   mutate(dif = `Significant layers` - `All layers`) %>%
-  rename(name_short = "name") %>%
+ # rename(name_short = "name") %>%
   left_join(x=., y = Orphanet_df) #, by = c(name = "name_short"))
 
 AUC_allnets_median <- AUC_folds_summary_updated_plot %>% 
-    rename(name_short = "name") %>%
+#    rename(name_short = "name") %>%
   dplyr::select(-Q25, -Q75) %>%
   dplyr::filter(label == 'Significant layers') %>%
   left_join(x=., y = Orphanet_df)
@@ -86,7 +98,7 @@ AUC_allnets_median <- AUC_folds_summary_updated_plot %>%
 
 p1 <- ggplot(AUC_folds_perf_compare %>%
                ungroup %>%
-               mutate(label = ifelse(dif< 0, name_short,""))
+               mutate(label = ifelse(dif< 0, name,""))
              , aes(x = significant_tissues, y = dif)) + 
   geom_point(col = "grey40") + 
   theme_cowplot() + guides(size = F) + 
@@ -119,15 +131,16 @@ cor.test(AUC_folds_perf_compare$dif,AUC_folds_perf_compare$significant_tissues, 
 cor.test(AUC_allnets_median$N, AUC_allnets_median$med, method = "spearman")
 ```
 
-## Performance difference: using relevant networks vs all networks (Suppl. Fig. 5b)
+## Performance difference: using relevant networks vs all networks (Suppl. Fig. 7b)
 
 
 ```{r}
 p <- AUC_folds_perf_compare %>%
-  left_join(., distinct(AUC_folds_summary, name) %>% rename(name_short = "name"), by="name_short") %>%
+  left_join(., distinct(AUC_folds_summary, name)# %>% rename(name_short = "name")
+            , by="name") %>%
   ungroup %>% 
-  mutate(name_short = fct_reorder(name_short, significant_tissues)) %>%
-  ggplot(., aes(x = name_short, y = significant_tissues, fill=dif)) + geom_col() + theme_minimal() + coord_flip() + 
+  mutate(name = fct_reorder(name, significant_tissues)) %>%
+  ggplot(., aes(x = name, y = significant_tissues, fill=dif)) + geom_col() + theme_minimal() + coord_flip() + 
   scale_fill_gradient2(low = "#66c2a5", high = "#8da0cb") + 
   ylab("# Significant tissues") + xlab("") + labs(fill = "")+ ggtitle("Performance difference", subtitle = "Selected networks vs all networks")
 

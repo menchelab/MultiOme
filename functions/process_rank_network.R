@@ -24,7 +24,7 @@ process_rank_network <- function(network_weight_df_custom = NULL, network_set=NU
         LCC_val_signif <- network_weight_df_custom
       }
       
-      el = el_all[LCC_val_signif$network]
+      el = el_all[as.character(LCC_val_signif$network)]
       
       gene_allnet = get_allnodes(el)
       supraadj = supraadjacency_compute(LCC_val_signif, el = el)

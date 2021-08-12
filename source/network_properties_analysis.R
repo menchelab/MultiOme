@@ -10,7 +10,7 @@ library(igraph)
 
 
 # 1 - load required files -----------
-g = process_graph_data("../data/network_edgelists/")
+g = process_graph_data("../data/network_edgelists//")
 
 all_nodes = sapply(g, function(x) V(x)$name) %>% unlist %>% unique 
 

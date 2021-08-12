@@ -134,6 +134,24 @@ ggsave("../Figs/barplot_ndisease_per_tissue_for_heatmap_updated.pdf",P_without_l
 p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
+## Most significant layers per disease group
 
+```{r}
+most_signif_per_disease_group <- processed_result_df %>% group_by(name) %>% mutate(rank = rank(-LCC.zscore)) %>% filter(rank ==1)
+most_signif_per_disease_group$type[most_signif_per_disease_group$network=="ppi"] = "PPI"
+most_signif_per_disease_group$type[most_signif_per_disease_group$network=="GOBP"] = "GO"
+most_signif_per_disease_group
+```
+
+```{r}
+p <- ggplot(most_signif_per_disease_group, aes(x=subtype)) + 
+  geom_bar() + 
+  facet_grid(.~type, space = "free", scales = "free") + 
+  theme_cowplot()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+  
+
+ggsave("../Figs/barplot_most_significant_networks.pdf",p, height = 4, width = 5)
+```
 
 
