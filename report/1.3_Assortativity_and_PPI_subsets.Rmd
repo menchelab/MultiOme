@@ -7,16 +7,99 @@
 ```{r}
 # read data
 library(pacman)
+p_load(cowplot, igraph)
 
-if(!file.exists("../cache/PPI_subset_and_CoexCore_properties.RDS")){
-  source("../source/compute_properties_PPIsubsets_and_CoexCore.R")
-}
+#if(!file.exists("../cache/PPI_subset_and_CoexCore_properties.RDS")){
+#  source("../source/compute_properties_PPIsubsets_and_CoexCore.R")
+#}
 
-g_prop_Labelled_df <- readRDS("../cache/PPI_subset_and_CoexCore_properties.RDS")
+#g_prop_Labelled_df <- readRDS("../cache/PPI_subset_and_CoexCore_properties.RDS")
+#cached_assortativity <- readRDS("../cache/citation_assortativities_PPI.RDS")
+
+#citation_assortativity <- cached_assortativity$citation_assortativity
+#neighour_degree_avg <- cached_assortativity$neighour_degree_avg
+#local_assortativity <- cached_assortativity$local_assortativity
+#ppi_degree <- cached_assortativity$ppi_degree
 ```
 
-```{r plot the results, fig.width=9, fig.height=2.5,  layout="l-body-outset"}
+```{r plot the g_prop_results, fig.width=9, fig.height=2.5,  layout="l-body-outset"}
 p_load(ggforce, patchwork)
+
+p_load(reshape2, patchwork, igraph)
+
+source("../functions/readdata_functions.R")
+g <- process_graph_data("../data/network_edgelist_additional//")
+g$PPI_HIPPIE <- process_graph_data("../data/network_edgelists/ppi.tsv")[[1]]
+
+# select  for plotting - those derived from PPI
+g <- g[names(g)][grepl("PPI_HIPPIE|core", names(g))]
+
+
+# code chunks from source/network_properties_analysis.R
+
+all_nodes = sapply(g, function(x) V(x)$name) %>% unlist %>% unique 
+
+# citation count (# PMID per genes, queried and processed by INDRA)
+citation_count = read_csv("../data/all_pmids_counts.csv", col_names = c("gene", "count"), col_types = "ci")
+citation_count = citation_count %>% arrange(-count) %>% mutate(rank = 1:nrow(.))
+
+citation_correlation = function(graph){
+  #' take the citation count and correlate it with the degree of each graph
+  
+  degree_g = degree(graph)
+  degree_g = tibble(gene = names(degree_g), degree = degree_g) 
+  degree_g = inner_join(degree_g, citation_count, by = "gene") %>% arrange(rank) 
+  #  degree_g =degree_g %>% filter(degree > 0) %>% group_by(gr=cut(degree, breaks=c(1,5,10,50,100,500,1000,5000), right=FALSE))
+  
+  #corval = cor(degree_g$count, degree_g$degree, method = "spearman")
+  return(degree_g)
+}
+
+degree_citation_df = lapply(g, citation_correlation)
+
+n_nodes = sapply(g, vcount)
+n_edges = sapply(g, ecount)
+density = sapply(g, edge_density)
+clustering = sapply(g, transitivity)
+local_clustering = sapply(g, function(graph) transitivity(graph, type = "average"))
+assortativity = sapply(g, function(graph) assortativity_degree(graph, directed = F))
+social_bias = sapply(degree_citation_df, function(x) cor(x$count, x$degree, method = "spearman"))
+
+# 3 - process the results and prepare for plotting
+
+g_prop_df = tibble(network = names(n_nodes), n_nodes, n_edges, density, clustering, local_clustering, assortativity, social_bias)
+g_prop_df = reshape2::melt(g_prop_df, variable.name = "property")
+
+
+g_prop_df =g_prop_df %>%
+  mutate(
+    # rename properties for readability
+    property = factor(property, labels = c("Number of nodes", "Number of edges", "Edge density", "Global clustering", "Avg local clustering", "Assortativity", "Social bias")),
+    # groups to plot
+    type = ifelse(grepl("core", network), "Co-expression", "PPI"), 
+    main_type = type,
+    subtype = sapply(network, function(x) strsplit(x ,"_")[[1]][2]), 
+    group = subtype, 
+    # alpha values (co-ex or not co-ex -- for aesthetic labelling)
+    alphaval = 0
+  )
+
+
+# get the stats from the original values
+
+g_prop_df_orig <- readRDS( "../cache/network_complementarity_topological.RDS")
+g_prop_coex <- g_prop_df_orig %>% filter(type == "Co-expression") %>% select(-source)
+g_prop_coex$group = "Tissue-specific"
+
+g_prop_Labelled_df <- rbind(g_prop_df, g_prop_coex)
+
+# make HIPPIE goes up the rank
+g_prop_Labelled_df$group <- fct_relevel(g_prop_Labelled_df$group, "HIPPIE", "HIPPIELargeScale", "HIPPIECurated", "Tissue-specific")
+g_prop_Labelled_df$group <- fct_relevel(g_prop_Labelled_df$group, rev)
+g_prop_Labelled_df$group <- factor(g_prop_Labelled_df$group,
+                                   levels = c("core", "Tissue-specific", "HIPPIECurated", "HIPPIELargeScale", "HIPPIE"), 
+                                   labels = c("Core (multi-tissue)", "Tissue-specific", "Curated", "Large scale", "Full PPI"))
+
 
 # create a list of  plots to patch together
 plot_combine = list()
@@ -74,63 +157,12 @@ suppressWarnings(print(plot_combi))
 #ggsave("../Figs/additional_network_properties.pdf", plot = plot_combi, height = 4, width = 10)
 ```
 
-## Assortativity (Suppl. Fig. 3e-f)
+## Average deegree of neighbours ($k_{nn}$) (Suppl. Fig. 3e)
 
-- Average deegree of neighbours ($k_{nn}$)
-- Local assortativity
-
-Two methods additionally employed to test dissortativity and prove its derivatives from noth high-throughput and curated PPI
+Two methods additionally employed to test dissortativity and prove its derivatives from noth high-throughput and curated PPI.
+Implementation of average degree of neighbours to observe the pattern of connectivity as a function of node degrees.
 
 ```{r knn}
-sumstat <- citation_assortativity %>% group_by(inBioPlexbait) %>% summarise(summary = list(summary(neighbour_degree)))
-sumstat[1,"summary"][[1]]
-sumstat[2,"summary"][[1]]
-
-p_count_neighbour <- ggplot(citation_assortativity, aes(x = count, y = neighbour_degree)) + 
-  geom_point(alpha = 0.1, col = "grey75") + theme_cowplot() + 
-  geom_point(data = citation_assortativity %>% 
-               group_by(count) %>% 
-               summarise(mean = mean(neighbour_degree)), 
-             aes(x = count, y = mean), col = "red", shape = 4)  + 
-  scale_y_log10() + 
-  scale_x_log10() +
-  xlab("# PubMed Count") + 
-  ylab(expression("<"~italic(k[nn])~"("~italic(k)~")>")) + 
-  ggtitle("PubMed count vs its PPI neighbours", 
-          subtitle = paste0("Pearson's r:", round(cor(citation_assortativity %>% 
-                                                        filter(!is.na(count), !is.na(neighbour_degree)) %>% pull(count), citation_assortativity %>% 
-                                                        filter(!is.na(count), !is.na(neighbour_degree)) %>% pull(neighbour_degree)), 3)))
-
-
-
-p_degree_neighbour <- ggplot(citation_assortativity, aes(x = degree, y = neighbour_degree)) + 
-  geom_point(alpha = 0.1, col = "grey75") + 
-  theme_cowplot() + 
-  geom_point(data = citation_assortativity %>% 
-               group_by(degree) %>% 
-               summarise(mean = mean(neighbour_degree)), 
-             aes(x = degree, y = mean), col = "red", shape = 4)  + 
-  scale_y_log10() + 
-  scale_x_log10() +
-  xlab(expression(italic(k))) + ylab(expression("<"~italic(k[nn])~"("~italic(k)~")>")) + 
-  ggtitle("PPI degrees vs its neighbours", 
-          subtitle = paste0("Pearson's r:", round(cor(ppi_degree, neighour_degree_avg), 3)))
-
-p_assortativity <- p_count_neighbour + p_degree_neighbour
-#ggsave("../Figs/local_assortativity_PPI.pdf", plot = p_assortativity, width = 8, height = 3)
-
-p_assortativity
-```
-
-```{r}
-bioplex_baits_293T <- read_tsv("../data/raw_data/Bioplex_293T-baits.tsv")
-bioplex_baits_293T$cell = "293T"
-bioplex_baits_HCT116 <- read_tsv("../data/raw_data/Bioplex_HCT116-baits.tsv")
-bioplex_baits_HCT116$cell <- "HCT116"
-
-bioplex_baits <- rbind(bioplex_baits_293T, bioplex_baits_HCT116)
-
-
 ppi_degree <- degree(g$PPI_HIPPIE)
 ppi_degree = ppi_degree[ppi_degree>0]
 
@@ -150,19 +182,73 @@ neighour_degree_avg = neighour_degree_avg[names(ppi_degree)]
 
 local_assortativity = (ppi_degree-1)*ppi_degree*(neighour_degree_avg - 1 - mean_q)/(2*ecount(g$PPI_HIPPIE)*variance_q)
 
+
+# Load bioplex subsets
+bioplex_baits_293T <- read_tsv("../data/raw_data/Bioplex_293T-baits.tsv")
+bioplex_baits_293T$cell = "293T"
+bioplex_baits_HCT116 <- read_tsv("../data/raw_data/Bioplex_HCT116-baits.tsv")
+bioplex_baits_HCT116$cell <- "HCT116"
+
+bioplex_baits <- rbind(bioplex_baits_293T, bioplex_baits_HCT116)
+
+## compute degree and assortativity
 cuts <- c(0,1,2,5, 10,20, 50,100, 200, 500,1000,5000)
 citation_assortativity = full_join(citation_count,
-  tibble(gene = names(ppi_degree), 
-         local_assortativity = local_assortativity,
-         degree = ppi_degree,
-         neighbour_degree = neighour_degree_avg,
-         degree_binned = cut(degree, breaks = cuts, labels = cuts[-1]),
-         label = ifelse(local_assortativity < -0.002, gene, ""))) %>%
+                                   tibble(gene = names(ppi_degree), 
+                                          local_assortativity = local_assortativity,
+                                          degree = ppi_degree,
+                                          neighbour_degree = neighour_degree_avg,
+                                          degree_binned = cut(degree, breaks = cuts, labels = cuts[-1]),
+                                          label = ifelse(local_assortativity < -0.002, gene, ""))) %>%
   filter(!is.na(local_assortativity)) %>%
   mutate(inBioPlexbait = gene %in% bioplex_baits$`Bait Symbol`)
 
 
-library(cowplot)
+sumstat <- citation_assortativity %>% group_by(inBioPlexbait) %>% summarise(summary = list(summary(neighbour_degree)))
+#sumstat[1,"summary"][[1]]
+#sumstat[2,"summary"][[1]]
+
+p_count_neighbour <- ggplot(citation_assortativity, aes(x = count, y = neighbour_degree)) + 
+  geom_point(alpha = 0.1, col = "grey75") + theme_cowplot() + 
+  geom_point(data = citation_assortativity %>% 
+               group_by(count) %>% 
+               summarise(mean = mean(neighbour_degree)), 
+             aes(x = count, y = mean), col = "red", shape = 4)  + 
+  scale_y_log10() + 
+  scale_x_log10() +
+  xlab("# PubMed Count") + 
+  ylab(expression("<"~italic(k[nn])~"("~italic(k)~")>")) + 
+  ggtitle("",#"PubMed count vs its PPI neighbours", 
+          subtitle = paste0("Pearson's r:", round(cor(citation_assortativity %>% 
+                                                        filter(!is.na(count), !is.na(neighbour_degree)) %>% pull(count), citation_assortativity %>% 
+                                                        filter(!is.na(count), !is.na(neighbour_degree)) %>% pull(neighbour_degree)), 3)))
+
+
+
+p_degree_neighbour <- ggplot(citation_assortativity, aes(x = degree, y = neighbour_degree)) + 
+  geom_point(alpha = 0.1, col = "grey75") + 
+  theme_cowplot() + 
+  geom_point(data = citation_assortativity %>% 
+               group_by(degree) %>% 
+               summarise(mean = mean(neighbour_degree)), 
+             aes(x = degree, y = mean), col = "red", shape = 4)  + 
+  scale_y_log10() + 
+  scale_x_log10() +
+  xlab(expression(italic(k))) + ylab(expression("<"~italic(k[nn])~"("~italic(k)~")>")) + 
+  ggtitle("",#"PPI degrees vs its neighbours", 
+          subtitle = paste0("Pearson's r:", round(cor(ppi_degree, neighour_degree_avg), 3)))
+
+p_assortativity <- p_count_neighbour + p_degree_neighbour
+#ggsave("../Figs/local_assortativity_PPI.pdf", plot = p_assortativity, width = 8, height = 3)
+
+p_assortativity
+```
+
+## Local assortativity on BioPlex networks
+
+Showing that dissortativity can be dervied from large-scale studies too due to bait selection.
+
+```{r}
 
 p_local_assortativity <- ggplot(citation_assortativity, aes(x = degree, y = local_assortativity, col = inBioPlexbait))+ 
   geom_point(alpha = 0.4) + 
@@ -180,11 +266,6 @@ p_local_assortativity
 ```
 
 ```{r}
-#ggplot(citation_assortativity %>% mutate(local_assortativity_cut = cut(local_assortativity, breaks = c(-1,-0.002,-0.001,-0.0005,-0.0001, -0.00005, -0.000001, 0, 1))) , aes(x = local_assortativity_cut, fill = inBioPlexbait))+ geom_bar(position = "dodge") + theme_cowplot()  + guides(col = F) #+ xlab("Degree") + ylab("Local assortartivity") + ggrepel::geom_text_repel(aes(label = label))
-
-#ggplot(citation_assortativity, aes(x = degree_binned, fill = inBioPlexbait))+ geom_bar(position = "dodge") + theme_cowplot()  + guides(col = F) #+ 
-
-
 p_local_assortativity_bioplex <- ggplot(citation_assortativity,  aes(x = inBioPlexbait, y= neighbour_degree, fill = inBioPlexbait)) + 
   geom_boxplot()  + 
   theme_cowplot()  + 
@@ -200,8 +281,15 @@ p_local_assortativity_bioplex <- ggplot(citation_assortativity,  aes(x = inBioPl
 p_local_assortativity_bioplex
 ```
 
-## Bioplex
 ```{r}
+# 
+
+# Load bioplex subsets
+bioplex_baits_293T <- read_tsv("../data/raw_data/Bioplex_293T-baits.tsv")
+bioplex_baits_293T$cell = "293T"
+bioplex_baits_HCT116 <- read_tsv("../data/raw_data/Bioplex_HCT116-baits.tsv")
+bioplex_baits_HCT116$cell <- "HCT116"
+
 g_bioplex_293T <- read_tsv("../data/raw_data/Bioplex_293T-interactions.tsv", col_types = "-c-c") %>% graph_from_data_frame(.,directed = "F")
 g_bioplex_HCT116 <- read_tsv("../data/raw_data/Bioplex_HCT116-interactions.tsv", col_types = "-c-c") %>% graph_from_data_frame(.,directed = "F")
 
@@ -265,8 +353,7 @@ p_bioplex_cell_assortaticity
 
 ## Disease associaton of PPI subsets
 
-```{r}
-
+```{r, fig.width=9, fig.height=9,  layout="l-body-outset"}
 p_load(ggforestplot)
 rare_genetic_result_folder = "../cache/output/Orphageneset_rare_additionalNetworks//"
 rare_genetic_heatmap_file = "../cache/heatmap_network_disease_association_orphanets_genetic_rare_diseases_additionalNetworks.pdf"

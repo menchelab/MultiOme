@@ -6,6 +6,7 @@ author:
   - first_name: "Pisanu"
     last_name: "Buphamalai"
     affiliation: Max Perutz Labs | CeMM
+    orcid_id: 0000-0002-9024-4193
     affiliation_url: https://www.maxperutzlabs.ac.at/  
   - first_name: "Tomislav"
     last_name: "Kokotovic"
@@ -35,12 +36,24 @@ This supplementary report is aimed to be a reproducible walk-through guide for f
 4. The pre-computed results are saved in `./cache` folder and can be downloaded from: [link](https://drive.google.com/file/d/1T7tJMojIbELeT-aLOD_Pv639eUgdGqUh/view) 
 5. The corresponding `Rmd` files used to produce this report can be found in `./report/` folder. The report mainly focuses on reproducing results shown in the manuscripts. For explanation, discussion, and references, please refer to the main manuscript.
 
+Note: genome-phenome data used in the analysis in `7.1_Prioritize_ID_RDconnect.Rmd` is subject to controlled access by RD-connect. 
+
 ```{r global setup, include=FALSE}
 filter <- dplyr::filter
 select <- dplyr::select
 ```
 
+
 ```{r child = '1_Network_complementarity.Rmd'}
+```
+
+```{r child = '1.1_coex_nodes_edges_characterization.Rmd '}
+```
+
+```{r child = '1.3_Assortativity_and_PPI_subsets.Rmd'}
+```
+
+```{r child = '1.2_literature_bias_analyses.Rmd'}
 ```
 
 ```{r child = '2_Co-expression_network_characterisation.Rmd'}
@@ -58,8 +71,15 @@ select <- dplyr::select
 ```{r child = '6_Cross_validation_retrieval.Rmd'}
 ```
 
+```{r child = '6.1_Performance_layer_removal.Rmd'}
+```
+
 ```{r child = '7_Patient_gene_prioritization.Rmd'}
 ```
+
+```{r child = '7.1_Prioritize_ID_RDconnect.Rmd'}
+```
+
 
 # Session Information
 

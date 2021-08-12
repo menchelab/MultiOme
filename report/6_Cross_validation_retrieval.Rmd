@@ -136,7 +136,7 @@ cor.test(AUC_allnets_median$N, AUC_allnets_median$med, method = "spearman")
 
 ```{r}
 p <- AUC_folds_perf_compare %>%
-  left_join(., distinct(AUC_folds_summary, name)# %>% rename(name_short = "name")
+  left_join(., distinct(AUC_folds_summary_updated_plot, name)# %>% rename(name_short = "name")
             , by="name") %>%
   ungroup %>% 
   mutate(name = fct_reorder(name, significant_tissues)) %>%

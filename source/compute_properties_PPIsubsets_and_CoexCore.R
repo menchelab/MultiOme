@@ -78,3 +78,51 @@ g_prop_Labelled_df$group <- factor(g_prop_Labelled_df$group,
                                    labels = c("Core (multi-tissue)", "Tissue-specific", "Curated", "Large scale", "Full PPI"))
 
 saveRDS(g_prop_Labelled_df, "../cache/PPI_subset_and_CoexCore_properties.RDS")
+
+####
+##  Compute citation count and local assortativity
+#####
+ppi_degree <- degree(g$PPI_HIPPIE)
+ppi_degree = ppi_degree[ppi_degree>0]
+
+p_k = degree_distribution(g$PPI_HIPPIE)
+p_k = p_k[-1]
+
+# q_k =  remain degree distribution
+q_k = (1:max(ppi_degree) +1)*c(p_k[-1],0)/mean(ppi_degree)
+#q_k = ppi_degree-1
+
+mean_q  = sum(1:max(ppi_degree)*q_k)
+variance_q = sum((mean(ppi_degree)-1:max(ppi_degree))^2 * q_k)
+
+
+neighour_degree_avg = knn(g$PPI_HIPPIE)$knn 
+neighour_degree_avg = neighour_degree_avg[names(ppi_degree)]
+
+local_assortativity = (ppi_degree-1)*ppi_degree*(neighour_degree_avg - 1 - mean_q)/(2*ecount(g$PPI_HIPPIE)*variance_q)
+
+# Load bioplex subsets
+bioplex_baits_293T <- read_tsv("../data/raw_data/Bioplex_293T-baits.tsv")
+bioplex_baits_293T$cell = "293T"
+bioplex_baits_HCT116 <- read_tsv("../data/raw_data/Bioplex_HCT116-baits.tsv")
+bioplex_baits_HCT116$cell <- "HCT116"
+
+bioplex_baits <- rbind(bioplex_baits_293T, bioplex_baits_HCT116)
+
+## compute degree and assortativity
+cuts <- c(0,1,2,5, 10,20, 50,100, 200, 500,1000,5000)
+citation_assortativity = full_join(citation_count,
+                                   tibble(gene = names(ppi_degree), 
+                                          local_assortativity = local_assortativity,
+                                          degree = ppi_degree,
+                                          neighbour_degree = neighour_degree_avg,
+                                          degree_binned = cut(degree, breaks = cuts, labels = cuts[-1]),
+                                          label = ifelse(local_assortativity < -0.002, gene, ""))) %>%
+  filter(!is.na(local_assortativity)) %>%
+  mutate(inBioPlexbait = gene %in% bioplex_baits$`Bait Symbol`)
+
+# save cached data
+saveRDS(list(citation_assortativity = citation_assortativity, 
+             neighour_degree_avg = neighour_degree_avg, 
+             ppi_degree = ppi_degree, 
+             local_assortativity = local_assortativity) , "../cache/citation_assortativities_PPI.RDS")

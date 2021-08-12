@@ -185,7 +185,7 @@ p
 
 
 ## HPO per patient - RDconnect
-```{r rdconnect patient hpo extract, eval=FALSE, include=TRUE}
+```{r top phenotypes for RDconnect patients ALL}
 
 RDConnect_solved_IDs <- patient_gene_df %>% filter(cohort == "RDConnect") %>% pull(`Experiment ID`) %>% unique()
 
@@ -208,9 +208,7 @@ HPO_details <- read_tsv("../data/raw_data/HPO_phenotype_to_genes.txt",
 HPO_count <- left_join(HPO_count, HPO_details, by = c(`HPO ids` = "HPOID"))
 
 HPO_count$HPOname <- factor(HPO_count$HPOname, levels = rev(HPO_count$HPOname))
-```
 
-```{r top phenotypes for RDconnect patients ALL}
 # most abundant phenotypes
 top_HP_terms <- HPO_count[1:20,]
 
@@ -504,6 +502,7 @@ p
 ```
 
 Reduce the information to network examples
+
 ```{r}
 #palettes <-  c(RColorBrewer::brewer.pal(5, "Greens")[2:5], "#3182BD")
 #palettes <-  c(RColorBrewer::brewer.pal(5, "Greens")[2:5],  "grey80")
@@ -612,7 +611,8 @@ p
 
 - Number supporting the plot above
 
-The difference between each method is presumably due to the absence of causal genes in the feature/
+The difference between each method is presumably due to the absence of causal genes in the feature
+
 ```{r}
 rank_group %>% group_by(network_set) %>% 
   summarise(group = group, top5 = n, all_patients = sum(n)) %>% 
@@ -728,25 +728,8 @@ p
 ```
 
 
-```{r}
-p <- ggplot(AUC_plot_nonPanel_compare, aes(x = rank_HP, y = informedMultiPlex, label = GeneName)) + geom_point(col = "grey20") + 
-  geom_abline(slope = 1, intercept = 0, col = "grey50", linetype = "dashed") + xlab("Rank: HP Overlap") + ylab("Rank: Informed Multiplex Propagation") + theme_cowplot()
-
-p
-```
-
-
-compare:
-```{r}
-AUC_plot_nonPanel_compare %>% mutate(
-  diff = informedMultiPlex - rank_HP,
-  diffVal = ifelse(diff > 0, "IMPbetter", ifelse(diff<0, "HPbetter", "tie"))
-) %>% count(diffVal)
-
-```
-
 ## Compare the performance between the full and Temporal holdout set 
-```{r}
+```{r,  layout="l-body-outset"}
 auc_vals_df <- tibble(Method  = names(auc_vals), AUC = unlist(auc_vals)) %>%
   filter(Method %in%  c("rank_inHP", "rank_popularity", "rank_expression_BrainAll", "rank_pathwaycounts", 
 "informedMultiPlex")) %>%
@@ -772,7 +755,10 @@ auc_vals_df_combn <- rbind(auc_vals_df, auc_vals_nonPanel_df) #%>%
  # mutate(Method = factor(Method, levels = selected_features_label))#,
          # Method = fct_reorder(Method, -(AUC)))
 
-p <- ggplot(auc_vals_df_combn, aes(x = testList, y = AUC, fill = Method)) + geom_col() + facet_grid(.~ Method)  + coord_cartesian(ylim = c(0.5, 1)) + scale_fill_manual(values = palettes) + theme_cowplot() + xlab("Patient list") 
+p <- ggplot(auc_vals_df_combn, aes(x = testList, y = AUC, fill = Method)) + geom_col() + 
+  facet_grid(.~ Method)  + 
+  coord_cartesian(ylim = c(0.5, 1)) + 
+  scale_fill_manual(values = palettes) + theme_cowplot() + xlab("Patient list") 
 
 #ggsave("../Figs/barplot_compare_AUC_full_vs_nonPanel_patientList.pdf", height = 3, width = 8)
 

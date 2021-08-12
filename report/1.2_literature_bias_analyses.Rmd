@@ -1,4 +1,4 @@
-# Literture bias analysis 
+# Literature bias analysis 
 
 Investigating gene properties derived from curated databases in terms of literature bias (Suppl. Fig. 4).
 
@@ -8,14 +8,14 @@ Investigating gene properties derived from curated databases in terms of literat
 
 ## Collect gene features from four example datasets
 1. Popularity - via citation counts
-2. # HPO terms matching genes
-3. # Associated GO terms (BP and MF)
-4. # Associated reactome pathways
+2. Number of HPO terms matching genes
+3. Number of associated GO terms (BP and MF)
+4. Number of associated reactome pathways
 5. Brain expression (as reference for non-curated data)
 
 ```{r}
 # Downloaded the precomputed gene features (count of annotated terms or expression level)
-
+source("../functions/readdata_functions.R")
 if(!file.exists("../cache/gene_features.tsv")){
   source("../source/collect_gene_features.R")
 }
@@ -25,13 +25,13 @@ gene_feature_df <- read_tsv(file = "../cache/gene_features.tsv")
 head(gene_feature_df)
 ```
 
-## Perform correlations among selected feature
+## Perform correlations among selected features
 1. Feature count - PubMed Count
 2. Feature count - Network degree
 3. Network degree - PubMed count (Literature bias)
 
 
-```{r, fig.width = 12, fig.height = 8}
+```{r, fig.width = 12, fig.height = 8,  layout="l-body-outset"}
 pacman::p_load(hexbin, cowplot, ggstatsplot, patchwork)
 
 
