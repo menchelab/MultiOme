@@ -1,14 +1,27 @@
-.Rproj.user
-.Rhistory
-.RData
-.Ruserdata
-analysis/
-networks/
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# uv
+.uv/
+
+# Tooling
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Project data caches (source-fetched + built bundles; raw edge lists in data/ are tracked)
+.cache/
+*.mpx/
+cache/
 Figs/
 trials/
-cache/
-data/
-report/draft
-report/test
-shiny/
-
