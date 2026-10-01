@@ -1,5 +1,15 @@
 """Plotting for algorithm outputs (matplotlib)."""
 
-from multiome_algo.viz.plots import plot_modularity_heatmap, plot_roc
+from multiome_algo.viz.plots import (
+    plot_candidate_ranking,
+    plot_cv_performance,
+    plot_layer_weights,
+    plot_modularity_heatmap,
+)
 
-__all__ = ["plot_modularity_heatmap", "plot_roc"]
+__all__ = [
+    "plot_candidate_ranking",
+    "plot_cv_performance",
+    "plot_layer_weights",
+    "plot_modularity_heatmap",
+]

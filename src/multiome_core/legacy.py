@@ -1,88 +1,66 @@
-"""Read the original MultiOme TSV edge lists into the typed Layer/Multiplex model.
+"""Shortcuts for the data shipped with the original 2021 repository.
 
-The 2021 repo ships 46 two-column TSV edge lists in data/network_edgelists/ with
-inconsistent headers ("A"/"B", "name1"/"name2", "Gene Name Interactor A/B", ...).
-We ignore the header names and take the first two columns as (source, target).
-
-This is the phase-1 bridge: it lets the algorithm (multiome_algo) run against the
-paper's own networks before the network-generation unit (multiome_net) is built.
+``data/network_edgelists/`` holds the paper's 46 binary layers (header rows of varying
+names - auto-detected), ``data/network_details.tsv`` their metadata, and
+``data/table_disease_gene_assoc_orphanet_genetic.tsv`` the 28 Orphanet rare-genetic
+disease groups (26 of which pass the paper's 20-2000 gene filter).
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
-import networkx as nx
-import pandas as pd
+from multiome_core.io import DEFAULT_CACHE, read_gene_groups, read_multiplex
+from multiome_core.schema import GeneGroup, Multiplex
 
-from multiome_core.schema import BiologicalScale, Layer, Multiplex
-
-# Layer id -> biological scale for the original 46-layer multiplex.
-# Co-expression layers (coex_*) are mapped programmatically below.
-_SCALE_BY_ID: dict[str, BiologicalScale] = {
-    "ppi": BiologicalScale.PROTEOME,
-    "co-essential": BiologicalScale.GENOME,
-    "reactome_copathway": BiologicalScale.PATHWAY,
-    "GOBP": BiologicalScale.FUNCTION,
-    "GOMF": BiologicalScale.FUNCTION,
-    "HP": BiologicalScale.PHENOTYPE,
-    "MP": BiologicalScale.PHENOTYPE,
-}
+REPO_DATA = Path(__file__).resolve().parents[2] / "data"
 
 
-def _scale_for(layer_id: str) -> BiologicalScale:
-    if layer_id.startswith("coex_"):
-        return BiologicalScale.TRANSCRIPTOME
-    return _SCALE_BY_ID.get(layer_id, BiologicalScale.OTHER)
-
-
-def read_edgelist(path: str | Path, layer_id: str | None = None) -> Layer:
-    """Read one TSV edge list into a Layer.
-
-    The first two columns are treated as (source, target) regardless of header names.
-    Self-loops are dropped. Graph is undirected and unweighted (matches the originals).
-    """
-    path = Path(path)
-    layer_id = layer_id or path.stem
-    df = pd.read_csv(path, sep="\t", usecols=[0, 1], header=0, dtype=str)
-    df.columns = ["source", "target"]
-    df = df.dropna()
-    df = df[df["source"] != df["target"]]  # drop self-loops
-
-    g = nx.from_pandas_edgelist(df, "source", "target")
-    return Layer(
-        id=layer_id,
-        graph=g,
-        scale=_scale_for(layer_id),
-        directed=False,
-        weighted=False,
-        node_namespace="HGNC_symbol",
-        source=f"legacy:{path.name}",
+def read_paper_multiplex(
+    data_dir: str | Path = REPO_DATA,
+    layer_ids: Iterable[str] | None = None,
+    cache_dir: str | Path | None = DEFAULT_CACHE,
+) -> Multiplex:
+    """Load the paper's multiplex (all 46 layers unless `layer_ids` is given)."""
+    data_dir = Path(data_dir)
+    return read_multiplex(
+        data_dir / "network_edgelists",
+        layer_ids=layer_ids,
+        metadata=data_dir / "network_details.tsv",
+        cache_dir=cache_dir,
+        name="buphamalai2021",
     )
 
 
-def read_multiplex(
-    edgelist_dir: str | Path,
-    layer_ids: list[str] | None = None,
-    name: str = "legacy",
-) -> Multiplex:
-    """Read a directory of TSV edge lists into a Multiplex.
+def read_paper_groups(data_dir: str | Path = REPO_DATA) -> list[GeneGroup]:
+    """Load the 28 Orphanet rare-genetic-disease groups (unfiltered)."""
+    path = Path(data_dir) / "table_disease_gene_assoc_orphanet_genetic.tsv"
+    return [
+        GeneGroup(id=g.id, genes=g.genes, label=g.label, source="orphanet")
+        for g in read_gene_groups(path)
+    ]
 
-    Args:
-        edgelist_dir: Directory containing *.tsv edge lists.
-        layer_ids: If given, only load these layer ids (file stems). Otherwise load all *.tsv.
-        name: Name for the multiplex.
+
+def read_paper_dataset(
+    data_dir: str | Path = REPO_DATA,
+    layer_ids: Iterable[str] | None = None,
+    normalize: bool = True,
+    cache_dir: str | Path | None = DEFAULT_CACHE,
+):
+    """The paper's multiplex and gene groups, by default with symbols normalised to
+    current HGNC (the shipped layers mix old and new symbol versions; see DEVIATIONS).
+
+    Returns:
+        (multiplex, groups, report): `report` lists every renamed/unresolved symbol
+        (empty DataFrame when `normalize` is False).
     """
-    edgelist_dir = Path(edgelist_dir)
-    if layer_ids is None:
-        paths = sorted(edgelist_dir.glob("*.tsv"))
-    else:
-        paths = [edgelist_dir / f"{lid}.tsv" for lid in layer_ids]
-        missing = [p for p in paths if not p.exists()]
-        if missing:
-            raise FileNotFoundError(f"Missing edge lists: {[str(p) for p in missing]}")
+    import pandas as pd
 
-    mpx = Multiplex(name=name)
-    for p in paths:
-        mpx.add(read_edgelist(p))
-    return mpx
+    mpx = read_paper_multiplex(data_dir, layer_ids, cache_dir)
+    groups = read_paper_groups(data_dir)
+    if not normalize:
+        return mpx, groups, pd.DataFrame(columns=["input", "output", "how"])
+    from multiome_core.ids import normalize_symbols
+
+    return normalize_symbols(mpx, groups)
