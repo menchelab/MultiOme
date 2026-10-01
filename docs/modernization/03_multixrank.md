@@ -1,5 +1,21 @@
 # MultiXrank — Tool Evaluation
 
+> **Historical design note (pre-2026-10 rebuild).** Kept for context; the implemented
+> package is narrower and differs in places. Factual errors found later:
+> - The original R code uses **no softmax**: raw LCC z-scores of the *significant* layers
+>   feed `pmat_cal` (`P[i,j] = min(1, z_i/z_j)/L`).
+> - Significance is **not** z ≥ 1.645. It is a `pnorm` p-value, BH over all
+>   group×layer pairs, q < 0.05, ≥ 10 genes and LCC ≥ 5.
+> - There are **46** layers, not 45.
+> - `ppi.tsv` is **HIPPIE**, not BioPlex + HuRI.
+> - The original has no global `delta`-style inter-layer jump parameter, so MultiXrank's
+>   parameters do not map onto it directly.
+>
+> **Parked as future work:** network generation (`multiome_net`), ToolUniverse data
+> sourcing, and the `.mpx` bundle/manifest with a fixed scale enum. All of these were
+> removed from the code. See `../DEVIATIONS.md` and the top-level README for current
+> behaviour.
+
 > Python package for RWR on heterogeneous multilayer networks.
 > Repo: https://github.com/anthbapt/multixrank · Docs: https://multixrank-doc.readthedocs.io/
 > Paper: Baptista, González, Baudot. "Universal multilayer network exploration by random walk with restart." Commun Phys 5, 170 (2022). DOI: 10.1038/s42005-022-00937-9.
@@ -66,7 +82,7 @@ Disease-gene prioritization, multi-omic integration, link prediction, leave-one-
 - Provide tunable, documented, cited parameters.
 
 **Caveats / gaps vs the paper's method:**
-- MultiOme's key innovation is **disease-specific layer weighting from LCC modularity z-scores** (the π_dm / softmax weighting). MultiXrank's `delta`/`tau`/`eta`/`lambda` are global params, not per-disease learned weights. To reproduce the paper's "informed" propagation, layer weights would need to be injected per disease (set tau/eta from LCC z-scores per run) — feasible but requires wrapping MultiXrank in a per-disease loop that recomputes params.
+- MultiOme's key innovation is **disease-specific layer weighting from LCC modularity z-scores** (the π_dm weighting via `pmat_cal`, not softmax). MultiXrank's `delta`/`tau`/`eta`/`lambda` are global params, not per-disease learned weights. To reproduce the paper's "informed" propagation, layer weights would need to be injected per disease (set tau/eta from LCC z-scores per run) — feasible but requires wrapping MultiXrank in a per-disease loop that recomputes params.
 - Scale: 46 layers × 20K nodes per disease group × many diseases × CV folds — verify performance is acceptable in Python vs the cluster-precomputed R.
 
 **Verdict**: Best candidate to replace the custom propagation engine, *if* we can map LCC-derived layer relevance onto its parameters. Worth a prototype. Alternatively, keep LCC weighting logic ours and use MultiXrank only as the RWR solver.

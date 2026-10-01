@@ -1,5 +1,21 @@
 # MultiOme Repository — Technical Analysis
 
+> **Historical design note (pre-2026-10 rebuild).** Kept for context; the implemented
+> package is narrower and differs in places. Factual errors found later:
+> - The original R code uses **no softmax**: raw LCC z-scores of the *significant* layers
+>   feed `pmat_cal` (`P[i,j] = min(1, z_i/z_j)/L`).
+> - Significance is **not** z ≥ 1.645. It is a `pnorm` p-value, BH over all
+>   group×layer pairs, q < 0.05, ≥ 10 genes and LCC ≥ 5.
+> - There are **46** layers, not 45.
+> - `ppi.tsv` is **HIPPIE**, not BioPlex + HuRI.
+> - The original has no global `delta`-style inter-layer jump parameter, so MultiXrank's
+>   parameters do not map onto it directly.
+>
+> **Parked as future work:** network generation (`multiome_net`), ToolUniverse data
+> sourcing, and the `.mpx` bundle/manifest with a fixed scale enum. All of these were
+> removed from the code. See `../DEVIATIONS.md` and the top-level README for current
+> behaviour.
+
 > Reference doc for the modernization effort. Snapshot of the existing 2021 codebase: what it does and how. Source: automated repo analysis, 2026-06-26.
 
 ## 1. Repository Structure
@@ -33,10 +49,10 @@ Top-level: `README.md`, `Dockerfile` (for the Shiny app only), `Multiome.Rproj`.
 
 **Note:** `phenotype_annotation.tab` is listed in the zip's `readme.txt` but is NOT in the archive and is NOT referenced anywhere in code. Its description ("cached HPO-gene association before 2018") is also wrong — it is the HPO→disease annotation file (now `phenotype.hpoa`). Dead/ghost entry.
 
-### Processed network edgelists (`data/network_edgelists/`) — 45 layers
+### Processed network edgelists (`data/network_edgelists/`) — 46 layers
 
 1. **Co-expression (38 tissue-specific + 1 core)** from GTEx, disparity-filtered (corr ≥ 0.75, p < 0.01), tissue-specificity filtered (edges in ≤5 tissues). Files `coex_*.tsv`, plus `coex_core.tsv`. ~66K–1M edges each.
-2. **PPI**: `ppi.tsv` (385K edges) — combined BioPlex + HuRI (HIPPIE).
+2. **PPI**: `ppi.tsv` (385K edges) — HIPPIE (not BioPlex/HuRI; those raw files serve only the PPI-subset analyses).
 3. **Functional**: `GOBP.tsv` (179K), `GOMF.tsv` (19K).
 4. **Phenotypic**: `HP.tsv` (84K), `MP.tsv` (34K).
 5. **Other**: `co-essential.tsv` (68K, CRISPR), `reactome_copathway.tsv`.
@@ -58,7 +74,7 @@ Top-level: `README.md`, `Dockerfile` (for the Shiny app only), `Multiome.Rproj`.
 Core: `p_{t+1} = (1−r)·W·p_t + r·p_0`, r = 0.7, W = column-normalized adjacency.
 Multiplex extension:
 1. Build supra-adjacency matrix across layers.
-2. Weight each layer by LCC z-score: `pmat = exp(z) / sum(exp(z))` (softmax).
+2. Keep only layers significant for the disease; their raw LCC z-scores w give the layer transition matrix `pmat_cal`: `P[i,j] = min(1, w_i/w_j)/L`, diagonal = 1 − Σ off-diagonal (no softmax).
 3. Propagate; aggregate across layers (arithmetic mean, geometric mean of probs, geometric mean of ranks).
 4. Return ranked gene list.
 
@@ -88,7 +104,7 @@ Scope: 3,771 OrphaNet rare-disease terms → ~26–50 groups (sparse annotations
 - Docker for the Shiny app only. No `renv.lock`. `pbapply` for progress (no real parallelism).
 
 ## 6. Outputs
-- Topology metrics, LCC results (50×45 disease×network matrix of z/p/FDR), CV rankings (multiplex vs baselines), patient prioritization ranks, overlap matrices — all `.RDS`.
+- Topology metrics, LCC results (disease×network matrix of z/p/FDR), CV rankings (multiplex vs baselines), patient prioritization ranks, overlap matrices — all `.RDS`.
 - Figures via RMarkdown (network complementarity, modularity heatmaps, tissue contextualization, CV AUC, patient case studies).
 - Shiny Explorer (3 panels: differential modularity, network landscape t-SNE, network-disease inspection). Deployed at menchelab.com/MultiOmeExplorer.
 - Network format: 2-column TSV edgelists.

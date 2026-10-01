@@ -1,5 +1,21 @@
 # MultiOme Modernization — Research Reference Index
 
+> **Historical design note (pre-2026-10 rebuild).** Kept for context; the implemented
+> package is narrower and differs in places. Factual errors found later:
+> - The original R code uses **no softmax**: raw LCC z-scores of the *significant* layers
+>   feed `pmat_cal` (`P[i,j] = min(1, z_i/z_j)/L`).
+> - Significance is **not** z ≥ 1.645. It is a `pnorm` p-value, BH over all
+>   group×layer pairs, q < 0.05, ≥ 10 genes and LCC ≥ 5.
+> - There are **46** layers, not 45.
+> - `ppi.tsv` is **HIPPIE**, not BioPlex + HuRI.
+> - The original has no global `delta`-style inter-layer jump parameter, so MultiXrank's
+>   parameters do not map onto it directly.
+>
+> **Parked as future work:** network generation (`multiome_net`), ToolUniverse data
+> sourcing, and the `.mpx` bundle/manifest with a fixed scale enum. All of these were
+> removed from the code. See `../DEVIATIONS.md` and the top-level README for current
+> behaviour.
+
 Background research compiled 2026-06-26 to inform modernizing the 2021 MultiOme codebase. These are reference docs, not the plan itself.
 
 ## Documents
