@@ -21,7 +21,8 @@ CV performance, and the candidate ranking with per-layer contributions.
 
 By default the method behaves as in the paper, with modern options available as flags.
 Everything that differs from the original R code, including flaws found in it, is listed
-in **[docs/DEVIATIONS.md](docs/DEVIATIONS.md)**.
+in **[docs/DEVIATIONS.md](docs/DEVIATIONS.md)**. A one-page visual summary is in
+[docs/overview.html](docs/overview.html).
 
 ## Install
 
