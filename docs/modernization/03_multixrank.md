@@ -13,7 +13,7 @@
 >
 > **Parked as future work:** network generation (`multiome_net`), ToolUniverse data
 > sourcing, and the `.mpx` bundle/manifest with a fixed scale enum. All of these were
-> removed from the code. See `../DEVIATIONS.md` and the top-level README for current
+> removed from the code. See `../CHANGES.md` and the top-level README for current
 > behaviour.
 
 > Python package for RWR on heterogeneous multilayer networks.

@@ -154,8 +154,10 @@ def cmd_modularity(args) -> None:
         labels = {g.id: g.label for g in groups}
         plot_modularity_heatmap(table, layer_tags=_tags(mpx), labels=labels,
                                 out=out / "modularity_heatmap.png")
+        import matplotlib.pyplot as plt
+
         for g in groups if args.per_group_plots else []:
-            plot_layer_weights(table, g.id, out=out / "layers" / f"{_safe(g.id)}.png")
+            plt.close(plot_layer_weights(table, g.id, out=out / "layers" / f"{_safe(g.id)}.png"))
     _log(f"wrote {out}/modularity.tsv")
 
 
@@ -319,7 +321,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--folds", type=int, default=10, help="folds per group (paper: 10)")
     p.add_argument("--protocol", choices=["train", "paper"], default="train",
                    help="layer selection from training genes (default) or the full group "
-                        "as published (leaks held-out genes)")
+                        "as published")
     p.add_argument("--configs", nargs="+",
                    help="NAME=LAYERS[:WEIGHTING], LAYERS = significant | all | id+id; "
                         "default: informed, all_uniform, ppi")

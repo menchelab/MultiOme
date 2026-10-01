@@ -25,3 +25,7 @@ dist/
 cache/
 Figs/
 trials/
+
+# Local run outputs (scripts/reproduce_paper.sh)
+results/
+multiome_out/

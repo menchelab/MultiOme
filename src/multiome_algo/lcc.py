@@ -165,7 +165,7 @@ def lcc_modularity(
     rand = null.samples(pos)
     mean = float(rand.mean())
     std = float(rand.std(ddof=1))
-    z = (observed - mean) / std if std > 0 else np.nan  # undefined, not 0: see DEVIATIONS
+    z = (observed - mean) / std if std > 0 else np.nan  # undefined, not 0: see docs/CHANGES.md
     return LCCResult(
         group_id=group_id or "",
         layer_id=layer.id,

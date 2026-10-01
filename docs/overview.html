@@ -45,7 +45,8 @@
   ul.kv li { padding: 4px 0; border-top: 1px solid var(--grid); }
   ul.kv li .tag { margin-right: 5px; }
   ul.kv li:first-child { border-top: 0; }
-  code { overflow-wrap: anywhere; font: 11.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
+  code { overflow-wrap: anywhere; background: #eef0f3; border: 1px solid #dde1e7;
+         border-radius: 4px; padding: 0 4px; font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
   .tag { display: inline-block; font-size: 10.5px; font-weight: 600; border-radius: 4px;
          padding: 0 5px; white-space: nowrap; line-height: 16px; }
   .tag.paper { background: var(--blue-soft); color: #1d4f8c; }
@@ -86,7 +87,7 @@
   <div class="legend" aria-label="legend">
     <span><i class="swatch" style="background:var(--blue-soft);border:1px solid #9cc2ef"></i>paper default</span>
     <span><i class="swatch" style="background:var(--orange-soft);border:1px solid #f3b195"></i>opt-in option</span>
-    <span><i class="swatch" style="background:#e3f5ee;border:1px solid #8fd6bb"></i>changed default (see DEVIATIONS.md)</span>
+    <span><i class="swatch" style="background:#e3f5ee;border:1px solid #8fd6bb"></i>improved default (see CHANGES.md)</span>
   </div>
 
   <section class="pipeline">
@@ -123,7 +124,7 @@
         <li><b>Folder of edge lists</b>, one file per layer (tsv/csv); header, delimiter auto-detected</li>
         <li>optional <code>layers.tsv</code>: tags, description</li>
         <li><b>Gene sets</b>: GMT, long or wide table</li>
-        <li><span class="tag new">new</span> HGNC symbol normalisation + coverage report</li>
+        <li><span class="tag new">improved</span> HGNC symbol normalisation + coverage report</li>
       </ul>
       <div class="spacer"></div>
       <p><code>read_multiplex</code> · <code>read_gene_groups</code></p>
@@ -197,7 +198,7 @@
         <li><span class="tag paper">paper</span> only significant layers; <code>P[i,j]=min(1,z<sub>i</sub>/z<sub>j</sub>)/L</code></li>
         <li><span class="tag paper">paper</span> restart r=0.7 from seed genes; score = mean over layers</li>
         <li><span class="tag opt">option</span> <code>coupling="present"</code> · geomean · uniform/softmax weights</li>
-        <li><span class="tag new">new</span> matrix-free, matches the R code to 1e-6</li>
+        <li><span class="tag new">improved</span> matrix-free, matches the R code to 1e-6</li>
       </ul>
       <div class="spacer"></div>
       <p><code>informed_rwr</code> → ranked candidate genes</p>
@@ -227,8 +228,8 @@
       </div>
       <ul class="kv">
         <li><span class="tag paper">paper</span> 10 folds; groups of 20–2000 genes; AUROC per fold</li>
-        <li><span class="tag new">new</span> same folds for every configuration</li>
-        <li><span class="tag new">new</span> layers chosen from training genes only; <code>protocol="paper"</code> uses the full group, as published</li>
+        <li><span class="tag new">improved</span> same folds for every configuration</li>
+        <li><span class="tag new">improved</span> layers chosen from training genes only; <code>protocol="paper"</code> uses the full group, as published</li>
       </ul>
       <div class="spacer"></div>
       <p><code>retrieval_cv</code> → per-fold AUROC, top-k</p>
@@ -302,21 +303,21 @@
     </div>
 
     <div class="panel">
-      <h3>What deviates from the original code</h3>
+      <h3>What changes in this version</h3>
       <table>
         <tbody>
-          <tr><td><span class="tag new">new</span></td><td>No leakage in CV: layers and weights come from training genes only. The published protocol inflated median AUROC by about 0.005.</td></tr>
-          <tr><td><span class="tag new">new</span></td><td>Gene symbols normalised to HGNC. The shipped layers mixed SEPT7 and SEPTIN7; unmatched memberships drop from 154 to 70.</td></tr>
-          <tr><td><span class="tag new">new</span></td><td>Seeded and reproducible. The R code's <code>seed=144</code> was never applied.</td></tr>
-          <tr><td><span class="tag opt">option</span></td><td>Degree-preserving null: the uniform null inflates z. For the largest group, PPI z drops from 10.5 to 2.5.</td></tr>
-          <tr><td><span class="tag opt">option</span></td><td>Empirical p-values: the normal approximation is anticonservative for small LCCs.</td></tr>
-          <tr><td><span class="tag opt">option</span></td><td>Present-only coupling: removes the pass-through copies of genes absent from a layer.</td></tr>
+          <tr><td><span class="tag new">improved</span></td><td>In CV, layers and weights are chosen from the training genes of each fold, which minimises leakage from held-out genes. <code>protocol="paper"</code> keeps the published setup; median AUROC differs by about 0.005.</td></tr>
+          <tr><td><span class="tag new">improved</span></td><td>Gene symbols are normalised to current HGNC, which reduces unmatched symbols across layers and gene sets (154 → 70 unmatched memberships).</td></tr>
+          <tr><td><span class="tag new">improved</span></td><td>Bring your own data: edge-list folders and GMT/TSV gene sets, a sparse-matrix cache, and a matrix-free walk that runs all 46 layers on a laptop.</td></tr>
+          <tr><td><span class="tag opt">option</span></td><td><code>null="degree"</code>: random sets matched by degree, for layers where well-studied genes dominate.</td></tr>
+          <tr><td><span class="tag opt">option</span></td><td><code>p_value="empirical"</code>: permutation p-values alongside the normal approximation.</td></tr>
+          <tr><td><span class="tag opt">option</span></td><td><code>coupling="present"</code>: walk only the layers a gene is part of.</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <p class="foot">Details: <a href="../README.md">README.md</a> · <a href="DEVIATIONS.md">DEVIATIONS.md</a> ·
+  <p class="foot">Details: <a href="../README.md">README.md</a> · <a href="CHANGES.md">CHANGES.md</a> ·
     Buphamalai P, Kokotovic T, Nagy V, Menche J. <i>Nat Commun</i> 12, 6306 (2021).</p>
 </main>
 </body>

@@ -241,12 +241,16 @@ def plot_candidate_ranking(
     )
     y = np.arange(len(top))
     is_hl = top["gene"].isin(highlight).to_numpy()
-    ax1.barh(y, top["score"], color=np.where(is_hl, SERIES[1], SERIES[0]), height=0.7)
+    # scale scores so the axis reads 0-10 and the exponent goes into the label
+    smax = float(top["score"].max()) or 1.0
+    exp = int(np.floor(np.log10(smax))) if smax < 0.01 else 0
+    ax1.barh(y, top["score"] / 10.0**exp, color=np.where(is_hl, SERIES[1], SERIES[0]),
+             height=0.7)
     ax1.set_yticks(y)
     ax1.set_yticklabels(top["gene"], fontsize=7)
     ax1.invert_yaxis()
-    ax1.set_xlabel("Score (mean visiting probability)")
-    ax1.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2))
+    unit = f" (\u00d710$^{{{exp}}}$)" if exp else ""
+    ax1.set_xlabel(f"Score: mean visiting probability{unit}")
     _style(ax1, "x")
     if highlight:
         ax1.legend(handles=[Patch(color=SERIES[0], label="candidate"),

@@ -49,7 +49,7 @@ def read_paper_dataset(
     cache_dir: str | Path | None = DEFAULT_CACHE,
 ):
     """The paper's multiplex and gene groups, by default with symbols normalised to
-    current HGNC (the shipped layers mix old and new symbol versions; see DEVIATIONS).
+    current HGNC (the shipped layers mix old and new symbol versions; see docs/CHANGES.md).
 
     Returns:
         (multiplex, groups, report): `report` lists every renamed/unresolved symbol

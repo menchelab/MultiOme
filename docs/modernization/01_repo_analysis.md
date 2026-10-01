@@ -13,7 +13,7 @@
 >
 > **Parked as future work:** network generation (`multiome_net`), ToolUniverse data
 > sourcing, and the `.mpx` bundle/manifest with a fixed scale enum. All of these were
-> removed from the code. See `../DEVIATIONS.md` and the top-level README for current
+> removed from the code. See `../CHANGES.md` and the top-level README for current
 > behaviour.
 
 > Reference doc for the modernization effort. Snapshot of the existing 2021 codebase: what it does and how. Source: automated repo analysis, 2026-06-26.

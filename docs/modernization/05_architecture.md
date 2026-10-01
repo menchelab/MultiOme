@@ -13,7 +13,7 @@
 >
 > **Parked as future work:** network generation (`multiome_net`), ToolUniverse data
 > sourcing, and the `.mpx` bundle/manifest with a fixed scale enum. All of these were
-> removed from the code. See `../DEVIATIONS.md` and the top-level README for current
+> removed from the code. See `../CHANGES.md` and the top-level README for current
 > behaviour.
 
 > Draft for discussion, 2026-06-26. Goal: clean, tool-friendly Python reimplementation that stays scientifically close to Buphamalai et al. 2021, with current data layers, network-building scripts, and plots — generalized so the unit of analysis is a **gene group** (any gene set), not specifically a rare-disease group.

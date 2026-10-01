@@ -20,9 +20,13 @@ It also makes the plots for each step: a modularity heatmap, layer relevance per
 CV performance, and the candidate ranking with per-layer contributions.
 
 By default the method behaves as in the paper, with modern options available as flags.
-Everything that differs from the original R code, including flaws found in it, is listed
-in **[docs/DEVIATIONS.md](docs/DEVIATIONS.md)**. A one-page visual summary is in
-[docs/overview.html](docs/overview.html).
+What changes from the original R code (improved defaults and new options) is listed in
+**[docs/CHANGES.md](docs/CHANGES.md)**.
+
+![MultiOme overview](docs/overview.png)
+
+<sub>The overview is drawn in HTML/CSS ([docs/overview.html](docs/overview.html)); edit it
+and run `scripts/render_overview.sh` to refresh the PNG.</sub>
 
 ## Install
 
@@ -150,15 +154,44 @@ over all groups to use the paper's selection.
 ## Reproducing the paper
 
 ```bash
-multiome modularity --paper --out paper/
+scripts/reproduce_paper.sh            # everything below, into results/
+```
+
+or step by step:
+
+```bash
+multiome modularity --paper --per-group-plots --out paper/
+multiome rank --paper --group Ciliopathy --modularity paper/modularity.tsv --out paper/
+multiome cv --paper --out paper_cv_train/                # default: layers chosen from training genes
 multiome cv --paper --protocol paper --out paper_cv/     # as published
-multiome cv --paper --out paper_cv_train/                # default, no leakage
 ```
 
 `--paper` loads the shipped 46 layers and Orphanet groups and normalises symbols to
-current HGNC (turn this off with `--no-normalize-ids`). Exact published numbers cannot be
-regenerated from the original code. Why, and how results compare, is in
-[docs/DEVIATIONS.md](docs/DEVIATIONS.md).
+current HGNC (turn this off with `--no-normalize-ids`). Expect close qualitative
+agreement with the published numbers; the full-scale comparison is in
+[docs/CHANGES.md](docs/CHANGES.md#full-scale-reproduction). The unit tests use small
+synthetic multiplexes and a three-layer subset of the shipped data; the full-scale numbers
+come from this script (seed 0).
+
+### Example output (shipped data, seed 0)
+
+**Layer relevance.** LCC z-score of each Orphanet group in each layer; dots mark
+BH q < 0.05.
+
+![Modularity heatmap](docs/figures/modularity_heatmap.png)
+
+**Cross-validated retrieval.** 10 folds per group, the same folds for every configuration.
+Panel b pairs each group across configurations.
+
+![CV performance](docs/figures/cv_performance.png)
+
+**One group: Ciliopathy.** The significant layers and their share of the walk (left), and
+the top candidates with each layer's share of their score (right).
+
+<p>
+<img src="docs/figures/layers_Ciliopathy.png" width="32%" alt="Ciliopathy layer relevance">
+<img src="docs/figures/ranking_Ciliopathy.png" width="66%" alt="Ciliopathy candidate ranking">
+</p>
 
 ## Layout
 
