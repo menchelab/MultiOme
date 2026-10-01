@@ -140,4 +140,25 @@ published numbers.
 
 ## Full-scale reproduction
 
-<!-- RESULTS -->
+These runs use all 46 shipped layers and the 26 Orphanet groups of 20–2000 genes, with
+symbols normalised. Each is 10-fold CV with 1000 null trials and seed 0, run with
+`multiome cv --paper [--protocol paper] [--null degree]` on a single laptop CPU core.
+
+| Setting | Informed | All layers, uniform | PPI only | Informed > uniform (groups) | Mean layers used | Runtime |
+|---|---|---|---|---|---|---|
+| `protocol="train"`, uniform null (default) | 0.906 | 0.858 | 0.723 | 19 / 26 | 11.2 | 18 min |
+| `protocol="paper"`, uniform null (as published) | 0.911 | 0.858 | 0.723 | 20 / 26 | 12.1 | 7 min |
+| `protocol="train"`, degree null | 0.887 | 0.858 | 0.723 | 17 / 26 | 10.1 | 67 min |
+
+Values in the first three columns are the median over groups of each group's median
+fold AUROC.
+
+- **The paper's main claim holds.** Informed walks beat the all-layer walk by about 0.05
+  median AUROC, and beat PPI alone by about 0.18.
+- **Leakage in the published protocol is real but small**, about +0.005 AUROC.
+- **The degree-preserving null selects fewer layers and lowers the informed AUROC** to
+  0.887. That is still above the uniform walk on AUROC. Top-100 recovery is the exception:
+  0.150 against 0.172 for the uniform walk (0.225 under the default null).
+- **Early retrieval (top-10) barely separates the configurations** (0.026–0.032).
+  Gains appear mainly over the top 100 and in the overall ranking.
+
