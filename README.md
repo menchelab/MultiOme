@@ -175,8 +175,10 @@ come from this script (seed 0).
 
 ### Example output (shipped data, seed 0)
 
-**Layer relevance.** LCC z-score of each Orphanet group in each layer; dots mark
-BH q < 0.05.
+**Layer relevance.** LCC z-score of each of the paper's 26 Orphanet groups (the 28 in
+the shipped table minus two below 20 genes) in each layer; dots mark BH q < 0.05. Layers
+are grouped by type, and within a type ordered so that layers with similar profiles sit
+together (`order="cluster"`; `"mean"` or an explicit list also work).
 
 ![Modularity heatmap](docs/figures/modularity_heatmap.png)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 import pytest
 
 from multiome_algo.lcc import (
@@ -81,3 +82,23 @@ def test_invalid_args(planted):
         modularity_table(mpx, groups, p_value="bogus")
     with pytest.raises(ValueError):
         LCCNull(mpx["A"], null="bogus")
+
+
+def test_heatmap_column_order(planted):
+    from multiome_algo.viz.plots import _cluster_order, plot_modularity_heatmap
+
+    mpx, groups = planted
+    tab = modularity_table(mpx, groups, n_trials=20, seed=0)
+    tags = {"A": "x", "B": "x", "C": "y"}
+    fig = plot_modularity_heatmap(tab, layer_tags=tags)
+    ax = fig.axes[0]
+    assert [t.get_text() for t in ax.get_xticklabels()][-1] == "C"  # grouped by tag
+    assert {"x", "y"} <= {t.get_text() for t in ax.texts}  # group labels drawn
+    fig = plot_modularity_heatmap(tab, order=["C", "B", "A"])
+    assert [t.get_text() for t in fig.axes[0].get_xticklabels()] == ["C", "B", "A"]
+    with pytest.raises(ValueError):
+        plot_modularity_heatmap(tab, order="bogus")
+    # profiles: a and c identical, b opposite -> a, c adjacent
+    m = pd.DataFrame({"a": [1, 2, 3, 4], "b": [4, 3, 2, 1], "c": [1, 2, 3, 4.1]})
+    order = _cluster_order(m)
+    assert abs(order.index("a") - order.index("c")) == 1

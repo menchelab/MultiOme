@@ -23,6 +23,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
+from matplotlib.transforms import offset_copy  # noqa: E402
 
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7",
           "#e34948"]
@@ -67,6 +68,47 @@ def _series_colors(names: Sequence[str]) -> dict[str, str]:
 # --------------------------------------------------------------------------- modularity
 
 
+def _cluster_order(mat: pd.DataFrame) -> list[str]:
+    """Columns of `mat` ordered by average-linkage clustering of their profiles
+    (correlation distance, optimal leaf ordering)."""
+    from scipy.cluster.hierarchy import leaves_list, linkage
+    from scipy.spatial.distance import pdist
+
+    if mat.shape[1] < 3:
+        return list(mat.columns)
+    x = np.nan_to_num(mat.to_numpy(dtype=float).T)
+    d = np.nan_to_num(pdist(x, metric="correlation"), nan=1.0)
+    return list(mat.columns[leaves_list(linkage(d, "average", optimal_ordering=True))])
+
+
+def _label_column_groups(ax, group_of: list[str]) -> None:
+    """Group names centred above their column spans, with a thin bracket; a label wider
+    than its span moves up a tier so neighbours never overlap."""
+    spans, start = [], 0
+    for k in range(1, len(group_of) + 1):
+        if k == len(group_of) or group_of[k] != group_of[start]:
+            spans.append((group_of[start], start, k - 1))
+            start = k
+    fig = ax.figure
+    renderer = fig.canvas.get_renderer()
+    tier_end: list[float] = []  # right edge (display px) of the last label in each tier
+    for name, a, b in spans:
+        if not name:
+            continue
+        ax.plot([a - 0.4, b + 0.4], [1.012, 1.012], color=AXIS, linewidth=1,
+                transform=ax.get_xaxis_transform(), clip_on=False)
+        txt = ax.text((a + b) / 2, 1.02, name, ha="center", va="bottom", fontsize=7,
+                      color=INK2, transform=ax.get_xaxis_transform())
+        box = txt.get_window_extent(renderer)
+        tier = next((t for t, end in enumerate(tier_end) if box.x0 > end + 4), len(tier_end))
+        if tier == len(tier_end):
+            tier_end.append(box.x1)
+        tier_end[tier] = box.x1
+        if tier:
+            dy = tier * box.height / ax.get_window_extent(renderer).height * 1.15
+            txt.set_y(1.02 + dy)
+
+
 def plot_modularity_heatmap(
     table: pd.DataFrame,
     layer_tags: Mapping[str, str] | None = None,
@@ -74,15 +116,20 @@ def plot_modularity_heatmap(
     clip: float | None = None,
     out: str | Path | None = None,
     labels: Mapping[str, str] | None = None,
+    order: str | Sequence[str] = "cluster",
 ):
     """Heatmap of LCC modularity (rows = groups, columns = layers).
 
     Args:
         table: `modularity_table` output.
-        layer_tags: {layer_id: tag} to group columns (e.g. from `Multiplex.summary()`).
+        layer_tags: {layer_id: tag} to group columns (e.g. from `Multiplex.summary()`);
+            each group is labelled above the heatmap.
         value: column to show ("z_score" by default).
         clip: symmetric colour limit; defaults to the 95th percentile of |value|.
         labels: {group_id: display label}.
+        order: column order within each tag group: "cluster" (layers with similar
+            profiles across gene groups sit together), "mean" (highest mean first), or an
+            explicit list of layer ids.
     Significant cells (``significant`` column) are marked with a dot; grey = not assessed.
     """
     mat = table.pivot(index="group_id", columns="layer_id", values=value)
@@ -90,14 +137,23 @@ def plot_modularity_heatmap(
     sig = sig.reindex_like(mat).fillna(False).astype(bool)
 
     tags = layer_tags or {}
-    cols = sorted(mat.columns, key=lambda c: (tags.get(c, "~"), -np.nanmean(mat[c]), c))
+    if isinstance(order, str):
+        if order not in ("cluster", "mean"):
+            raise ValueError(f"order must be 'cluster', 'mean' or a list, got {order!r}")
+        by_mean = sorted(mat.columns, key=lambda c: (-np.nanmean(mat[c]), c))
+        cols = []
+        for tag in sorted({tags.get(c, "") for c in mat.columns}, key=lambda t: (not t, t)):
+            members = [c for c in by_mean if tags.get(c, "") == tag]
+            cols += _cluster_order(mat[members]) if order == "cluster" else members
+    else:
+        cols = [c for c in order if c in mat.columns]
     rows = mat.loc[:, cols].mean(axis=1).sort_values(ascending=False).index
     mat, sig = mat.loc[rows, cols], sig.loc[rows, cols]
 
     finite = np.abs(mat.to_numpy()[np.isfinite(mat.to_numpy())])
     lim = clip or (float(np.percentile(finite, 95)) if finite.size else 1.0)
     lim = max(lim, 1e-6)
-    fig, ax = plt.subplots(figsize=(max(6, 0.22 * len(cols) + 3), max(3, 0.24 * len(rows) + 1.5)))
+    fig, ax = plt.subplots(figsize=(max(6, 0.22 * len(cols) + 3), max(3, 0.24 * len(rows) + 2)))
     cmap = DIVERGING.with_extremes(bad="#f5f5f3")
     im = ax.imshow(np.ma.masked_invalid(mat.to_numpy()), aspect="auto", cmap=cmap,
                    norm=TwoSlopeNorm(vcenter=0, vmin=-lim, vmax=lim))
@@ -109,20 +165,27 @@ def plot_modularity_heatmap(
     ax.set_yticks(range(len(rows)))
     ax.set_yticklabels([(labels or {}).get(r, r) for r in rows], fontsize=7)
     _style(ax, grid_axis="")
-    # separators between tag groups
+    cb = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.01, extend="both")
+    cb.set_label("LCC z-score" if value == "z_score" else value, color=INK2, fontsize=8)
+    cb.outline.set_visible(False)
+    cb.ax.tick_params(labelsize=7, colors=INK2, length=0)
+    fig.tight_layout()
     if tags:
         group_of = [tags.get(c, "") for c in cols]
         for k in range(1, len(cols)):
             if group_of[k] != group_of[k - 1]:
                 ax.axvline(k - 0.5, color="white", linewidth=2)
-    cb = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.01, extend="both")
-    cb.set_label("LCC z-score" if value == "z_score" else value, color=INK2, fontsize=8)
-    cb.outline.set_visible(False)
-    cb.ax.tick_params(labelsize=7, colors=INK2, length=0)
+        _label_column_groups(ax, group_of)
+    pad = 22 if tags else 6  # room for the group labels
     ax.legend(loc="lower right", bbox_to_anchor=(1, 1), frameon=False, fontsize=7,
-              labelcolor=INK2, handletextpad=0.2, borderaxespad=0.2)
-    ax.set_title("Gene-group modularity per layer", loc="left", color=INK, fontsize=10)
-    return _finish(fig, out)
+              labelcolor=INK2, handletextpad=0.2, borderaxespad=0,
+              bbox_transform=offset_copy(ax.transAxes, fig, y=pad, units="points"))
+    ax.set_title("Gene-group modularity per layer", loc="left", color=INK, fontsize=10,
+                 pad=pad)
+    if out:
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out, dpi=200, bbox_inches="tight", facecolor="white")
+    return fig
 
 
 def plot_layer_weights(

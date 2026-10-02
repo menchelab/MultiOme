@@ -122,8 +122,9 @@ def read_layer_metadata(path: str | Path) -> pd.DataFrame:
     out = pd.DataFrame({"layer_id": df.iloc[:, 0]})
     if "tags" in cols:
         out["tags"] = df[cols["tags"]].map(lambda s: tuple(t for t in s.split(";") if t))
-    elif "type" in cols:  # original network_details.tsv
-        out["tags"] = df[cols["type"]].map(lambda s: (s,) if s else ())
+    elif "type" in cols:  # original network_details.tsv: type, else main_type
+        main = df[cols["main_type"]] if "main_type" in cols else pd.Series("", index=df.index)
+        out["tags"] = [(t or m,) if (t or m) else () for t, m in zip(df[cols["type"]], main)]
     else:
         out["tags"] = [()] * len(df)
     desc_col = cols.get("description") or cols.get("subtype")
